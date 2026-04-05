@@ -160,12 +160,17 @@ export class ControlPlaneService {
   async listLedgerLinks(workspaceId: string): Promise<WorkspaceLedgerLink[]> {
     if (!isSupabaseConfigured()) {
       const state = readLocalState();
-      return state.ledgers.filter((ledger) => ledger.workspaceId === workspaceId);
+      return state.ledgers
+        .filter((ledger) => ledger.workspaceId === workspaceId)
+        .map((ledger) => ({
+          ...ledger,
+          status: ledger.status ?? "active",
+        }));
     }
 
     const { data, error } = await supabase
       .from("ledgers")
-      .select("id,workspace_id,ledger_pda,ledger_code,authority_pubkey,created_at")
+      .select("id,workspace_id,ledger_pda,ledger_code,authority_pubkey,status,created_at")
       .eq("workspace_id", workspaceId);
 
     if (error || !data) return [];
@@ -176,6 +181,7 @@ export class ControlPlaneService {
       ledgerPda: row.ledger_pda,
       ledgerCode: row.ledger_code,
       authorityPubkey: row.authority_pubkey,
+      status: row.status ?? "active",
       createdAt: row.created_at,
     }));
   }
@@ -230,6 +236,7 @@ export class ControlPlaneService {
     ledgerPda: string;
     ledgerCode: string;
     authorityPubkey: string;
+    status?: "active" | "inactive";
   }): Promise<void> {
     if (!isSupabaseConfigured()) {
       const state = readLocalState();
@@ -243,6 +250,7 @@ export class ControlPlaneService {
         ledgerPda: payload.ledgerPda,
         ledgerCode: payload.ledgerCode,
         authorityPubkey: payload.authorityPubkey,
+        status: payload.status ?? "active",
         createdAt:
           existingIndex >= 0
             ? state.ledgers[existingIndex].createdAt
@@ -262,7 +270,39 @@ export class ControlPlaneService {
       ledger_pda: payload.ledgerPda,
       ledger_code: payload.ledgerCode,
       authority_pubkey: payload.authorityPubkey,
+      status: payload.status ?? "active",
     });
+  }
+
+  async setLedgerLinkStatus(payload: {
+    workspaceId: string;
+    ledgerPda: string;
+    status: "active" | "inactive";
+  }): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      const index = state.ledgers.findIndex(
+        (ledger) =>
+          ledger.workspaceId === payload.workspaceId && ledger.ledgerPda === payload.ledgerPda,
+      );
+      if (index < 0) return;
+      state.ledgers[index] = {
+        ...state.ledgers[index],
+        status: payload.status,
+      };
+      writeLocalState(state);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("ledgers")
+      .update({ status: payload.status })
+      .eq("workspace_id", payload.workspaceId)
+      .eq("ledger_pda", payload.ledgerPda);
+
+    if (error) {
+      throw new Error(`Failed to update ledger link status: ${error.message}`);
+    }
   }
 
   async unlinkLedgerFromWorkspace(workspaceId: string, ledgerPda: string): Promise<void> {

@@ -237,14 +237,19 @@ export function WorkingContextProvider({ children }: { children: React.ReactNode
     if (
       workspaceId &&
       ledgerPda &&
-      !ledgerLinks.some((row) => row.workspaceId === workspaceId && row.ledgerPda === ledgerPda)
+      !ledgerLinks.some(
+        (row) => row.workspaceId === workspaceId && row.ledgerPda === ledgerPda,
+      )
     ) {
       dispatch({ type: "clear_invalid_ledger" });
     }
   }, [workspaceId, ledgerPda, ledgerLinks]);
 
   const ledgerOptions = useMemo(
-    () => ledgerLinks.filter((row) => (workspaceId ? row.workspaceId === workspaceId : false)),
+    () =>
+      ledgerLinks.filter(
+        (row) => (workspaceId ? row.workspaceId === workspaceId : false) && row.status === "active",
+      ),
     [ledgerLinks, workspaceId],
   );
 

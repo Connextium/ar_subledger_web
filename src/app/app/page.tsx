@@ -30,7 +30,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   const workspaceLedgerSet = useMemo(() => {
-    return new Set(ledgerLinks.map((row) => row.ledgerPda));
+    return new Set(ledgerLinks.filter((row) => row.status === "active").map((row) => row.ledgerPda));
   }, [ledgerLinks]);
 
   useEffect(() => {

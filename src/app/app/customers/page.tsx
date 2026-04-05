@@ -158,7 +158,10 @@ export default function CustomersPage() {
   }, [selectedCustomer, codeRegistry, customerLedgerLinks]);
 
   const ledgerOptions = useMemo(
-    () => ledgerLinks.map((row) => ({ value: row.ledgerPda, label: `${row.ledgerCode} (${row.ledgerPda.slice(0, 8)}...)` })),
+    () =>
+      ledgerLinks
+        .filter((row) => row.status === "active")
+        .map((row) => ({ value: row.ledgerPda, label: `${row.ledgerCode} (${row.ledgerPda.slice(0, 8)}...)` })),
     [ledgerLinks],
   );
 
