@@ -1,0 +1,1463 @@
+{
+  "address": "3jRx3EYaVqU6LizE3d9od4Luim9NABWTFUvNe6E68xRg",
+  "metadata": {
+    "name": "ar_subledger",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Accounts Receivable subledger on Solana using Anchor"
+  },
+  "instructions": [
+    {
+      "name": "close_invoice",
+      "discriminator": [
+        217,
+        64,
+        46,
+        247,
+        231,
+        36,
+        118,
+        252
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "customer"
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_customer",
+      "discriminator": [
+        120,
+        122,
+        113,
+        216,
+        95,
+        207,
+        252,
+        147
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "customer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  109,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "ledger"
+              },
+              {
+                "kind": "arg",
+                "path": "customer_code"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "customer_code",
+          "type": "string"
+        },
+        {
+          "name": "customer_name",
+          "type": "string"
+        },
+        {
+          "name": "credit_limit",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize_ledger",
+      "discriminator": [
+        104,
+        2,
+        30,
+        235,
+        31,
+        207,
+        174,
+        162
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "ledger_code",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "issue_credit_note",
+      "discriminator": [
+        6,
+        140,
+        202,
+        176,
+        222,
+        95,
+        91,
+        33
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "customer",
+          "writable": true
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        },
+        {
+          "name": "credit_note",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "invoice"
+              },
+              {
+                "kind": "arg",
+                "path": "credit_seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "credit_seq",
+          "type": "u64"
+        },
+        {
+          "name": "credit_no",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "credit_date",
+          "type": "i64"
+        },
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "issue_invoice",
+      "discriminator": [
+        159,
+        194,
+        249,
+        111,
+        13,
+        163,
+        231,
+        132
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "customer",
+          "writable": true
+        },
+        {
+          "name": "invoice",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  111,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "ledger"
+              },
+              {
+                "kind": "arg",
+                "path": "invoice_no"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "invoice_no",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "issue_date",
+          "type": "i64"
+        },
+        {
+          "name": "due_date",
+          "type": "i64"
+        },
+        {
+          "name": "currency",
+          "type": "string"
+        },
+        {
+          "name": "description",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "record_receipt",
+      "discriminator": [
+        123,
+        1,
+        227,
+        189,
+        86,
+        215,
+        19,
+        253
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "customer",
+          "writable": true
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        },
+        {
+          "name": "receipt",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  101,
+                  105,
+                  112,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "invoice"
+              },
+              {
+                "kind": "arg",
+                "path": "receipt_seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "receipt_seq",
+          "type": "u64"
+        },
+        {
+          "name": "receipt_no",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "receipt_date",
+          "type": "i64"
+        },
+        {
+          "name": "payment_reference",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "update_customer",
+      "discriminator": [
+        158,
+        118,
+        103,
+        177,
+        241,
+        229,
+        169,
+        124
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "customer",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "status",
+          "type": "u8"
+        },
+        {
+          "name": "credit_limit",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "write_off_invoice",
+      "discriminator": [
+        97,
+        65,
+        173,
+        45,
+        105,
+        111,
+        38,
+        165
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "customer",
+          "writable": true
+        },
+        {
+          "name": "invoice",
+          "writable": true
+        },
+        {
+          "name": "writeoff",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  119,
+                  114,
+                  105,
+                  116,
+                  101,
+                  111,
+                  102,
+                  102
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "invoice"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "writeoff_date",
+          "type": "i64"
+        },
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "CreditNote",
+      "discriminator": [
+        227,
+        76,
+        104,
+        33,
+        171,
+        126,
+        61,
+        232
+      ]
+    },
+    {
+      "name": "Customer",
+      "discriminator": [
+        112,
+        147,
+        140,
+        31,
+        93,
+        186,
+        103,
+        18
+      ]
+    },
+    {
+      "name": "Invoice",
+      "discriminator": [
+        51,
+        194,
+        250,
+        114,
+        6,
+        104,
+        18,
+        164
+      ]
+    },
+    {
+      "name": "LedgerConfig",
+      "discriminator": [
+        13,
+        85,
+        142,
+        42,
+        183,
+        126,
+        75,
+        140
+      ]
+    },
+    {
+      "name": "Receipt",
+      "discriminator": [
+        39,
+        154,
+        73,
+        106,
+        80,
+        102,
+        145,
+        153
+      ]
+    },
+    {
+      "name": "WriteOff",
+      "discriminator": [
+        130,
+        26,
+        25,
+        129,
+        25,
+        255,
+        215,
+        251
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "CreditNoteIssued",
+      "discriminator": [
+        112,
+        72,
+        64,
+        74,
+        80,
+        35,
+        44,
+        141
+      ]
+    },
+    {
+      "name": "CustomerCreated",
+      "discriminator": [
+        203,
+        207,
+        124,
+        78,
+        115,
+        136,
+        79,
+        163
+      ]
+    },
+    {
+      "name": "CustomerUpdated",
+      "discriminator": [
+        245,
+        197,
+        83,
+        234,
+        152,
+        62,
+        182,
+        139
+      ]
+    },
+    {
+      "name": "InvoiceClosed",
+      "discriminator": [
+        73,
+        15,
+        241,
+        78,
+        178,
+        104,
+        112,
+        196
+      ]
+    },
+    {
+      "name": "InvoiceIssued",
+      "discriminator": [
+        63,
+        225,
+        173,
+        230,
+        246,
+        121,
+        53,
+        65
+      ]
+    },
+    {
+      "name": "InvoiceWrittenOff",
+      "discriminator": [
+        81,
+        87,
+        193,
+        149,
+        48,
+        181,
+        14,
+        45
+      ]
+    },
+    {
+      "name": "ReceiptRecorded",
+      "discriminator": [
+        254,
+        226,
+        37,
+        71,
+        33,
+        0,
+        78,
+        15
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidLedgerCode",
+      "msg": "Invalid ledger code"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidCustomerCode",
+      "msg": "Invalid customer code"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidCustomerName",
+      "msg": "Invalid customer name"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidCustomerStatus",
+      "msg": "Invalid customer status"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidInvoiceNo",
+      "msg": "Invalid invoice number"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidReceiptNo",
+      "msg": "Invalid receipt number"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidCreditNo",
+      "msg": "Invalid credit note number"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidCurrency",
+      "msg": "Invalid currency"
+    },
+    {
+      "code": 6008,
+      "name": "DescriptionTooLong",
+      "msg": "Description too long"
+    },
+    {
+      "code": 6009,
+      "name": "ReasonTooLong",
+      "msg": "Reason too long"
+    },
+    {
+      "code": 6010,
+      "name": "PaymentReferenceTooLong",
+      "msg": "Payment reference too long"
+    },
+    {
+      "code": 6011,
+      "name": "InvalidAmount",
+      "msg": "Invalid amount"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidDueDate",
+      "msg": "Invalid due date"
+    },
+    {
+      "code": 6013,
+      "name": "CustomerInactive",
+      "msg": "Customer is inactive"
+    },
+    {
+      "code": 6014,
+      "name": "CreditLimitExceeded",
+      "msg": "Credit limit exceeded"
+    },
+    {
+      "code": 6015,
+      "name": "CreditLimitBelowOutstanding",
+      "msg": "Credit limit cannot be below outstanding balance"
+    },
+    {
+      "code": 6016,
+      "name": "CustomerLedgerMismatch",
+      "msg": "Customer does not belong to ledger"
+    },
+    {
+      "code": 6017,
+      "name": "InvoiceLedgerMismatch",
+      "msg": "Invoice does not belong to ledger"
+    },
+    {
+      "code": 6018,
+      "name": "InvoiceCustomerMismatch",
+      "msg": "Invoice does not belong to customer"
+    },
+    {
+      "code": 6019,
+      "name": "InvoiceNotReceivable",
+      "msg": "Invoice is not in receivable state"
+    },
+    {
+      "code": 6020,
+      "name": "InvoiceNotCreditable",
+      "msg": "Invoice is not creditable"
+    },
+    {
+      "code": 6021,
+      "name": "InvoiceNotWriteOffEligible",
+      "msg": "Invoice is not eligible for writeoff"
+    },
+    {
+      "code": 6022,
+      "name": "AmountExceedsOpenBalance",
+      "msg": "Amount exceeds open balance"
+    },
+    {
+      "code": 6023,
+      "name": "InvoiceStillOpen",
+      "msg": "Invoice is still open"
+    },
+    {
+      "code": 6024,
+      "name": "InvoiceNotClosable",
+      "msg": "Invoice not closable"
+    },
+    {
+      "code": 6025,
+      "name": "InvalidSequence",
+      "msg": "Invalid sequence"
+    },
+    {
+      "code": 6026,
+      "name": "WriteOffAlreadyExists",
+      "msg": "Writeoff already exists"
+    },
+    {
+      "code": 6027,
+      "name": "MathOverflow",
+      "msg": "Math overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "CreditNote",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "credit_seq",
+            "type": "u64"
+          },
+          {
+            "name": "credit_no",
+            "type": "string"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "credit_date",
+            "type": "i64"
+          },
+          {
+            "name": "reason",
+            "type": "string"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditNoteIssued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "credit_note",
+            "type": "pubkey"
+          },
+          {
+            "name": "credit_no",
+            "type": "string"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "open_amount_after",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Customer",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "customer_code",
+            "type": "string"
+          },
+          {
+            "name": "customer_name",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "u8"
+          },
+          {
+            "name": "credit_limit",
+            "type": "u64"
+          },
+          {
+            "name": "total_outstanding",
+            "type": "u64"
+          },
+          {
+            "name": "total_invoiced",
+            "type": "u64"
+          },
+          {
+            "name": "total_paid",
+            "type": "u64"
+          },
+          {
+            "name": "total_credited",
+            "type": "u64"
+          },
+          {
+            "name": "total_written_off",
+            "type": "u64"
+          },
+          {
+            "name": "invoice_count",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CustomerCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "customer_code",
+            "type": "string"
+          },
+          {
+            "name": "customer_name",
+            "type": "string"
+          },
+          {
+            "name": "credit_limit",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CustomerUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "status",
+            "type": "u8"
+          },
+          {
+            "name": "credit_limit",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Invoice",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice_no",
+            "type": "string"
+          },
+          {
+            "name": "original_amount",
+            "type": "u64"
+          },
+          {
+            "name": "open_amount",
+            "type": "u64"
+          },
+          {
+            "name": "paid_amount",
+            "type": "u64"
+          },
+          {
+            "name": "credited_amount",
+            "type": "u64"
+          },
+          {
+            "name": "written_off_amount",
+            "type": "u64"
+          },
+          {
+            "name": "currency",
+            "type": "string"
+          },
+          {
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "name": "issue_date",
+            "type": "i64"
+          },
+          {
+            "name": "due_date",
+            "type": "i64"
+          },
+          {
+            "name": "status",
+            "type": "u8"
+          },
+          {
+            "name": "receipt_seq",
+            "type": "u64"
+          },
+          {
+            "name": "credit_seq",
+            "type": "u64"
+          },
+          {
+            "name": "has_writeoff",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InvoiceClosed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice_no",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InvoiceIssued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice_no",
+            "type": "string"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "due_date",
+            "type": "i64"
+          },
+          {
+            "name": "currency",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InvoiceWrittenOff",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "writeoff",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "open_amount_after",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LedgerConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "ledger_code",
+            "type": "string"
+          },
+          {
+            "name": "customer_count",
+            "type": "u64"
+          },
+          {
+            "name": "invoice_count",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Receipt",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "receipt_seq",
+            "type": "u64"
+          },
+          {
+            "name": "receipt_no",
+            "type": "string"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "receipt_date",
+            "type": "i64"
+          },
+          {
+            "name": "payment_reference",
+            "type": "string"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReceiptRecorded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "customer",
+            "type": "pubkey"
+          },
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "receipt",
+            "type": "pubkey"
+          },
+          {
+            "name": "receipt_no",
+            "type": "string"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "open_amount_after",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WriteOff",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "invoice",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "writeoff_date",
+            "type": "i64"
+          },
+          {
+            "name": "reason",
+            "type": "string"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}
