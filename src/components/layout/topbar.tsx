@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,7 @@ import { clampText } from "@/lib/utils/format";
 export function Topbar() {
   const { user, signOut } = useAuth();
   const { workspaces, selectedWorkspaceId, selectWorkspace, role, createWorkspace } = useWorkspace();
-  const { wallet, regenerateWallet } = useEmbeddedWallet();
+  const { wallet } = useEmbeddedWallet();
   const [newWorkspace, setNewWorkspace] = useState("");
   const [copied, setCopied] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -88,9 +89,12 @@ export function Topbar() {
               </Button>
             </>
           ) : null}
-          <Button variant="ghost" onClick={regenerateWallet}>
-            Rotate Wallet
-          </Button>
+          <Link
+            href="/app/configuration#create-wallet"
+            className="inline-flex items-center justify-center rounded-md bg-transparent px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+          >
+            Wallet Settings
+          </Link>
           <button
             type="button"
             title={walletAddress || "No wallet"}

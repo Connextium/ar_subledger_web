@@ -3,7 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { AppRole, Workspace, WorkspaceLedgerLink } from "@/lib/types/domain";
 import { useAuth } from "@/context/auth-context";
-import { useArSubledger } from "@/hooks/use-ar-subledger";
+import { env } from "@/lib/config/env";
+import { supabase } from "@/lib/supabase/client";
 import { controlPlaneService } from "@/services/control-plane-service";
 
 type WorkspaceContextValue = {
@@ -21,7 +22,6 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const service = useArSubledger();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [role, setRole] = useState<AppRole>("admin");
@@ -49,37 +49,52 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         controlPlaneService.getRole(current, user.id),
         controlPlaneService.listLedgerLinks(current),
       ]);
-      let nextLinks = links;
-
-      if (service && links.length > 0) {
-        const onChainLedgers = await service.listLedgers();
-        const onChainSet = new Set(onChainLedgers.map((ledger) => ledger.pubkey));
-        const staleLinks = links.filter((link) => !onChainSet.has(link.ledgerPda));
-
-        if (staleLinks.length > 0) {
-          await Promise.all(
-            staleLinks.map((link) =>
-              controlPlaneService.unlinkLedgerFromWorkspace(link.workspaceId, link.ledgerPda),
-            ),
-          );
-          nextLinks = links.filter((link) => onChainSet.has(link.ledgerPda));
-        }
-      }
 
       setRole(nextRole);
-      setLedgerLinks(nextLinks);
+      setLedgerLinks(links);
     } else {
       setRole("admin");
       setLedgerLinks([]);
     }
 
     setLoading(false);
-  }, [selectedWorkspaceId, service, user]);
+  }, [selectedWorkspaceId, user]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!env.supabaseUrl || !env.supabaseAnonKey) return;
+    if (!user || !selectedWorkspaceId) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const accessToken = session?.access_token;
+        if (!accessToken || cancelled) return;
+
+        await fetch("/api/wallets/bootstrap", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ workspaceId: selectedWorkspaceId }),
+        });
+      } catch {
+        // Phase C bootstrap failures should not block workspace load.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedWorkspaceId, user]);
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({

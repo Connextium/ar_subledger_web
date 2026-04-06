@@ -7,6 +7,7 @@ import { PageTitle } from "@/components/ui/page-title";
 import { Panel } from "@/components/ui/panel";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
 import { useRoleGate } from "@/hooks/use-role-gate";
+import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
 import { useWorkingContext } from "@/context/working-context";
 import { controlPlaneService } from "@/services/control-plane-service";
@@ -41,6 +42,7 @@ type FormErrors = Record<string, string>;
 
 export default function WorkflowPage() {
   const service = useArSubledger();
+  const { wallet } = useEmbeddedWallet();
   const { canWriteTransactions } = useRoleGate();
   const { selectedWorkspaceId } = useWorkspace();
   const { workspaceId, ledgerPda, customerId, invoicePubkey, setCustomerId, setInvoicePubkey } =
@@ -116,6 +118,16 @@ export default function WorkflowPage() {
   const selectedInvoice = useMemo(
     () => filteredInvoices.find((row) => row.pubkey === invoicePubkey) ?? null,
     [filteredInvoices, invoicePubkey],
+  );
+
+  const selectedLedger = useMemo(
+    () => (ledgerPda ? ledgers.find((row) => row.pubkey === ledgerPda) ?? null : null),
+    [ledgerPda, ledgers],
+  );
+
+  const currentSignerPubkey = wallet?.publicKey.toBase58() ?? null;
+  const hasLedgerAuthorityMismatch = Boolean(
+    selectedLedger && currentSignerPubkey && selectedLedger.authority !== currentSignerPubkey,
   );
 
   const loadRecords = async () => {
@@ -225,6 +237,14 @@ export default function WorkflowPage() {
               return;
             }
 
+            if (hasLedgerAuthorityMismatch) {
+              setErrors({
+                form:
+                  "Selected ledger authority does not match current signer wallet. Set the matching wallet as Main in Configuration, then retry.",
+              });
+              return;
+            }
+
             const parsed = issueInvoiceSchema.safeParse({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoiceNo, amount: invoiceAmount, issueDate, dueDate, currency, description });
             if (!parsed.success) {
               const message = parsed.error.issues[0]?.message ?? "Please fill in required invoice fields.";
@@ -252,6 +272,11 @@ export default function WorkflowPage() {
             {!activeOnchainCustomerPubkey ? (
               <p className="text-[11px] text-slate-600">
                 Select a ledger and a linked customer in context bar to enable submission.
+              </p>
+            ) : null}
+            {hasLedgerAuthorityMismatch ? (
+              <p className="text-[11px] text-amber-700">
+                Signer mismatch: ledger authority is {selectedLedger?.authority}, current signer is {currentSignerPubkey}. Update main wallet in Configuration.
               </p>
             ) : null}
             {!canWriteTransactions ? (

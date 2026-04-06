@@ -19,9 +19,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthProvider>
-      <EmbeddedWalletProvider>
-        <WorkspaceProvider>{children}</WorkspaceProvider>
-      </EmbeddedWalletProvider>
+      <WorkspaceProvider>
+        <EmbeddedWalletProvider>{children}</EmbeddedWalletProvider>
+      </WorkspaceProvider>
     </AuthProvider>
   );
 }

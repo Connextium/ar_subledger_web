@@ -11,6 +11,7 @@ const links = [
   { href: "/app/invoices", label: "Invoices" },
   { href: "/app/settlements", label: "Settlements" },
   { href: "/app/timeline", label: "Activity" },
+  { href: "/app/configuration", label: "Configuration" },
 ];
 
 export function Sidebar() {
