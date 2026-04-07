@@ -39,7 +39,7 @@ export function Sidebar() {
   const isLightTheme = theme === "light";
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-slate-100 p-4">
+    <aside className="flex h-full w-full min-w-0 flex-col bg-slate-100 p-4">
       <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">AR Suite</p>
         <p className="mt-1 text-sm font-semibold text-slate-900">Subledger Protocol</p>
