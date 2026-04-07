@@ -90,7 +90,14 @@ export class ArSubledgerService
   }
 
   async initializeLedger(input: InitializeLedgerInput): Promise<string> {
-    const [ledgerPda] = deriveLedgerPda(this.wallet.publicKey);
+    const [ledgerPda] = deriveLedgerPda(this.wallet.publicKey, input.ledgerCode);
+    const existingLedger = await this.getLedger(ledgerPda.toBase58());
+    if (existingLedger) {
+      throw new Error(
+        `Ledger code '${input.ledgerCode}' already exists for this wallet. Use a different ledger code.`,
+      );
+    }
+
     await this.executeWithFundingRetry(async () => {
       await this.program.methods
         .initializeLedger(input.ledgerCode)

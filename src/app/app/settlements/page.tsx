@@ -5,10 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "@/components/records/data-table";
 import { SearchBar } from "@/components/records/search-bar";
+import { useWorkingContext } from "@/context/working-context";
 import { PageTitle } from "@/components/ui/page-title";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
-import type { CreditNoteRecord, ReceiptRecord, WriteOffRecord } from "@/lib/types/domain";
+import type { CreditNoteRecord, InvoiceRecord, ReceiptRecord, WriteOffRecord } from "@/lib/types/domain";
 import { formatLamportsAmount, formatUnixDate } from "@/lib/utils/format";
+import { controlPlaneService } from "@/services/control-plane-service";
 
 type SettlementRow = {
   pubkey: string;
@@ -23,11 +25,58 @@ type SettlementRow = {
 export default function SettlementsPage() {
   const service = useArSubledger();
   const searchParams = useSearchParams();
+  const { workspaceId, ledgerPda: contextLedgerPda, customerId: contextCustomerId } = useWorkingContext();
+
   const invoiceParam = searchParams.get("invoice");
+  const ledgerParam = searchParams.get("ledger");
+  const customerParam = searchParams.get("customer");
+
+  const activeLedgerPda = ledgerParam ?? contextLedgerPda;
+  const selectedCustomerScope = customerParam ?? contextCustomerId;
 
   const [rows, setRows] = useState<SettlementRow[]>([]);
+  const [scopedCustomerPubkeys, setScopedCustomerPubkeys] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [scopeLoading, setScopeLoading] = useState(false);
+
+  useEffect(() => {
+    const resolveScope = async () => {
+      if (!selectedCustomerScope) {
+        setScopedCustomerPubkeys([]);
+        setScopeLoading(false);
+        return;
+      }
+
+      if (!workspaceId) {
+        setScopedCustomerPubkeys([selectedCustomerScope]);
+        setScopeLoading(false);
+        return;
+      }
+
+      setScopeLoading(true);
+      try {
+        const links = await controlPlaneService.listWorkspaceCustomerLedgerLinks({
+          workspaceId,
+          workspaceCustomerId: selectedCustomerScope,
+        });
+
+        const scopedLinks = links.filter(
+          (row) => row.status === "active" && (!activeLedgerPda || row.ledgerPda === activeLedgerPda),
+        );
+
+        const resolved = Array.from(
+          new Set([selectedCustomerScope, ...scopedLinks.map((row) => row.onchainCustomerPubkey)]),
+        );
+
+        setScopedCustomerPubkeys(resolved);
+      } finally {
+        setScopeLoading(false);
+      }
+    };
+
+    void resolveScope();
+  }, [activeLedgerPda, selectedCustomerScope, workspaceId]);
 
   useEffect(() => {
     const run = async () => {
@@ -35,19 +84,39 @@ export default function SettlementsPage() {
         setLoading(false);
         return;
       }
+
+      if (!selectedCustomerScope) {
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
-        const [receipts, credits, writeoffs] = await Promise.all([
+        const scopedCustomerSet = new Set(
+          scopedCustomerPubkeys.length > 0 ? scopedCustomerPubkeys : [selectedCustomerScope],
+        );
+
+        const [invoices, receipts, credits, writeoffs] = await Promise.all([
+          service.listInvoices(activeLedgerPda ?? undefined),
           service.listReceipts(invoiceParam ?? undefined),
           service.listCreditNotes(invoiceParam ?? undefined),
           service.listWriteOffs(invoiceParam ?? undefined),
         ]);
 
+        const scopedInvoiceSet = new Set(
+          invoices
+            .filter((invoice: InvoiceRecord) => scopedCustomerSet.has(invoice.customer))
+            .map((invoice: InvoiceRecord) => invoice.pubkey),
+        );
+
         const flattened: SettlementRow[] = [
           ...mapReceipts(receipts),
           ...mapCredits(credits),
           ...mapWriteoffs(writeoffs),
-        ].sort((a, b) => b.occurredAt - a.occurredAt);
+        ]
+          .filter((row) => scopedInvoiceSet.has(row.invoice))
+          .sort((a, b) => b.occurredAt - a.occurredAt);
 
         setRows(flattened);
       } finally {
@@ -56,7 +125,7 @@ export default function SettlementsPage() {
     };
 
     void run();
-  }, [invoiceParam, service]);
+  }, [activeLedgerPda, invoiceParam, scopedCustomerPubkeys, selectedCustomerScope, service]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -73,7 +142,7 @@ export default function SettlementsPage() {
     <div>
       <PageTitle
         title="Settlements"
-        subtitle="Receipts, credit notes, and write-offs with links back to parent invoices."
+        subtitle="Showing settlement records for the selected customer in current context."
         actions={
           <div className="flex gap-2 text-[11px]">
             <Link href="/app/workflow#record-receipt" className="underline decoration-slate-300">
@@ -96,13 +165,19 @@ export default function SettlementsPage() {
           onChange={setSearch}
           placeholder="Document no, invoice, type..."
         />
-        <p className="text-[11px] text-slate-500">{loading ? "Loading..." : `${filtered.length} row(s)`}</p>
+        <p className="text-[11px] text-slate-500">
+          {loading || scopeLoading ? "Loading..." : `${filtered.length} row(s)`}
+        </p>
       </div>
 
       <DataTable
         title="Settlement Records"
         rows={filtered}
-        emptyLabel="No settlement records found."
+        emptyLabel={
+          selectedCustomerScope
+            ? "No settlement records found for selected customer."
+            : "Select a customer to view settlements."
+        }
         columns={[
           {
             key: "kind",

@@ -14,9 +14,9 @@ type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
 export function Select({ label, options, error, className = "", ...props }: SelectProps) {
   return (
     <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-700">
-      <span>{label}</span>
+      {label ? <span>{label}</span> : null}
       <select
-        className={`rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none ring-slate-200 focus:ring-2 ${className}`}
+        className={`rounded-md border border-slate-300 bg-slate-50 px-2.5 py-2 text-xs text-slate-900 outline-none focus:border-cyan-300/60 ${className}`}
         {...props}
       >
         {options.map((option) => (
@@ -25,7 +25,7 @@ export function Select({ label, options, error, className = "", ...props }: Sele
           </option>
         ))}
       </select>
-      {error ? <span className="text-[10px] font-medium text-rose-600">{error}</span> : null}
+      {error ? <span className="text-[10px] font-medium text-rose-400">{error}</span> : null}
     </label>
   );
 }

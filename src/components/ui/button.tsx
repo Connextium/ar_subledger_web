@@ -5,10 +5,14 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
-  primary: "bg-slate-900 text-white hover:bg-slate-700",
-  secondary: "bg-slate-200 text-slate-900 hover:bg-slate-300",
-  danger: "bg-rose-700 text-white hover:bg-rose-600",
-  ghost: "bg-transparent text-slate-700 hover:bg-slate-100",
+  primary:
+    "border bg-[var(--btn-primary-bg)] border-[var(--btn-primary-border)] text-[var(--btn-primary-fg)] hover:bg-[var(--btn-primary-bg-hover)]",
+  secondary:
+    "border bg-[var(--btn-secondary-bg)] border-[var(--btn-secondary-border)] text-[var(--btn-secondary-fg)] hover:bg-[var(--btn-secondary-bg-hover)]",
+  danger:
+    "border bg-[var(--btn-danger-bg)] border-[var(--btn-danger-border)] text-[var(--btn-danger-fg)] hover:bg-[var(--btn-danger-bg-hover)]",
+  ghost:
+    "border border-transparent bg-transparent text-[var(--btn-ghost-fg)] hover:border-[var(--btn-ghost-border-hover)] hover:bg-[var(--btn-ghost-bg-hover)]",
 };
 
 export function Button({

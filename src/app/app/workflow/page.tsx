@@ -308,7 +308,7 @@ export default function WorkflowPage() {
             {filteredInvoices.length === 0 ? <p className="px-2 py-3 text-xs text-slate-500">No invoices for this context.</p> : (
               <div className="space-y-2">
                 {filteredInvoices.map((row) => (
-                  <button key={row.pubkey} type="button" onClick={() => setInvoicePubkey(row.pubkey)} className={["w-full rounded-md border px-3 py-2 text-left transition", row.pubkey === selectedInvoice?.pubkey ? "border-slate-700 bg-slate-800 text-white" : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"].join(" ")}>
+                  <button key={row.pubkey} type="button" onClick={() => setInvoicePubkey(row.pubkey)} className={["w-full rounded-md border px-3 py-2 text-left transition", row.pubkey === selectedInvoice?.pubkey ? "border-[var(--badge-border)] bg-[var(--badge-bg)] text-[var(--badge-fg)]" : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"].join(" ")}>
                     <p className="text-xs font-semibold">{row.invoiceNo}</p>
                     <p className="mt-1 text-[11px] opacity-85">Open: {formatLamportsAmount(row.openAmount, row.currency || "USD")}</p>
                   </button>

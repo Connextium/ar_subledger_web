@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SearchBar } from "@/components/records/search-bar";
 import { PageTitle } from "@/components/ui/page-title";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,10 @@ import { useWorkingContext } from "@/context/working-context";
 import { useRoleGate } from "@/hooks/use-role-gate";
 import { controlPlaneService } from "@/services/control-plane-service";
 import { initializeLedgerSchema } from "@/lib/validation/schemas";
-import type { LedgerRecord } from "@/lib/types/domain";
+import type { LedgerRecord, WorkspaceLedgerLink } from "@/lib/types/domain";
 import { clampText } from "@/lib/utils/format";
+
+const DEFAULT_INIT_LEDGER_CODE = "AR-";
 
 export default function LedgersPage() {
   const router = useRouter();
@@ -32,7 +34,8 @@ export default function LedgersPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [localSelectedLedgerPda, setLocalSelectedLedgerPda] = useState<string | null>(null);
-  const [initLedgerCode, setInitLedgerCode] = useState("AR-US-2026");
+  const [initLedgerCode, setInitLedgerCode] = useState(DEFAULT_INIT_LEDGER_CODE);
+  const [isInitializingNewLedgerMode, setIsInitializingNewLedgerMode] = useState(false);
   const [initializingLedger, setInitializingLedger] = useState(false);
   const [formCode, setFormCode] = useState("");
   const [customersByLedger, setCustomersByLedger] = useState<
@@ -46,6 +49,12 @@ export default function LedgersPage() {
     }>
   >([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [allAccessibleLedgerLinks, setAllAccessibleLedgerLinks] = useState<WorkspaceLedgerLink[]>([]);
+
+  const refreshAccessibleLedgerLinks = useCallback(async () => {
+    const links = await controlPlaneService.listAccessibleLedgerLinks();
+    setAllAccessibleLedgerLinks(links);
+  }, []);
 
   useEffect(() => {
     const run = async () => {
@@ -55,13 +64,21 @@ export default function LedgersPage() {
       }
       setLoading(true);
       try {
-        setRows(await service.listLedgers());
+        const [nextRows] = await Promise.all([
+          service.listLedgers(),
+          refreshAccessibleLedgerLinks(),
+        ]);
+        setRows(nextRows);
       } finally {
         setLoading(false);
       }
     };
     void run();
-  }, [service]);
+  }, [service, refreshAccessibleLedgerLinks]);
+
+  useEffect(() => {
+    void refreshAccessibleLedgerLinks();
+  }, [activeWorkspaceId, refreshAccessibleLedgerLinks]);
 
   const linkedSet = useMemo(
     () =>
@@ -101,10 +118,15 @@ export default function LedgersPage() {
     [activeWorkspaceId, ledgerLinks],
   );
 
+  const getDisplayLedgerCode = useCallback(
+    (_ledgerPdaValue: string, onchainLedgerCode: string) => onchainLedgerCode,
+    [],
+  );
+
   const duplicateCodeSet = useMemo(() => {
     const counts = new Map<string, number>();
     for (const row of rows) {
-      const key = row.ledgerCode.trim().toUpperCase();
+      const key = getDisplayLedgerCode(row.pubkey, row.ledgerCode).trim().toUpperCase();
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return new Set(
@@ -112,19 +134,39 @@ export default function LedgersPage() {
         .filter(([, count]) => count > 1)
         .map(([code]) => code),
     );
-  }, [rows]);
+  }, [getDisplayLedgerCode, rows]);
 
-  const filtered = rows.filter((row) => {
+  const workspaceScopedRows = useMemo(() => {
+    if (!activeWorkspaceId) return [];
+
+    const workspaceLinks = ledgerLinks.filter((row) => row.workspaceId === activeWorkspaceId);
+    const rowByPda = new Map(rows.map((row) => [row.pubkey, row]));
+
+    return workspaceLinks.map((link) => {
+      const onchain = rowByPda.get(link.ledgerPda);
+      if (onchain) return onchain;
+      return {
+        pubkey: link.ledgerPda,
+        authority: link.authorityPubkey,
+        ledgerCode: link.ledgerCode,
+        customerCount: 0,
+        invoiceCount: 0,
+      };
+    });
+  }, [activeWorkspaceId, ledgerLinks, rows]);
+
+  const filtered = workspaceScopedRows.filter((row) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
-    return row.ledgerCode.toLowerCase().includes(q) || row.pubkey.toLowerCase().includes(q);
+    const displayLedgerCode = getDisplayLedgerCode(row.pubkey, row.ledgerCode).toLowerCase();
+    return displayLedgerCode.includes(q) || row.pubkey.toLowerCase().includes(q);
   });
 
   const selectedLedgerPubkey = localSelectedLedgerPda ?? ledgerPda;
 
   const selectedLedger = useMemo(
-    () => rows.find((row) => row.pubkey === selectedLedgerPubkey) ?? null,
-    [rows, selectedLedgerPubkey],
+    () => workspaceScopedRows.find((row) => row.pubkey === selectedLedgerPubkey) ?? null,
+    [selectedLedgerPubkey, workspaceScopedRows],
   );
 
   const selectedLink = useMemo(
@@ -132,10 +174,46 @@ export default function LedgersPage() {
     [ledgerLinkByPda, selectedLedger],
   );
 
-  const selectedLedgerHasDuplicateCode = useMemo(
-    () => (selectedLedger ? duplicateCodeSet.has(selectedLedger.ledgerCode.trim().toUpperCase()) : false),
-    [duplicateCodeSet, selectedLedger],
+  const selectedDisplayLedgerCode = useMemo(
+    () =>
+      selectedLedger
+        ? getDisplayLedgerCode(selectedLedger.pubkey, selectedLedger.ledgerCode)
+        : null,
+    [getDisplayLedgerCode, selectedLedger],
   );
+
+  const selectedLedgerHasDuplicateCode = useMemo(
+    () =>
+      selectedDisplayLedgerCode
+        ? duplicateCodeSet.has(selectedDisplayLedgerCode.trim().toUpperCase())
+        : false,
+    [duplicateCodeSet, selectedDisplayLedgerCode],
+  );
+
+  const activeOwnerWorkspaceIdsByLedgerPda = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const row of allAccessibleLedgerLinks) {
+      if (row.status !== "active") continue;
+      const existing = map.get(row.ledgerPda) ?? new Set<string>();
+      existing.add(row.workspaceId);
+      map.set(row.ledgerPda, existing);
+    }
+    return map;
+  }, [allAccessibleLedgerLinks]);
+
+  const selectedLedgerOwnedByAnotherWorkspace = useMemo(() => {
+    if (!selectedLedger) return false;
+    const ownerWorkspaceIds = activeOwnerWorkspaceIdsByLedgerPda.get(selectedLedger.pubkey);
+    if (!ownerWorkspaceIds || ownerWorkspaceIds.size === 0) return false;
+    if (!activeWorkspaceId) return false;
+    return Array.from(ownerWorkspaceIds).some((workspace) => workspace !== activeWorkspaceId);
+  }, [activeOwnerWorkspaceIdsByLedgerPda, activeWorkspaceId, selectedLedger]);
+
+  const canActivateSelectedLedgerInWorkspace = useMemo(() => {
+    if (!selectedLedger) return false;
+    if (!selectedLedgerOwnedByAnotherWorkspace) return true;
+    return linkedSet.has(selectedLedger.pubkey);
+  }, [linkedSet, selectedLedger, selectedLedgerOwnedByAnotherWorkspace]);
 
   const defaultLedgerPubkey = useMemo(() => {
     if (activeWorkspaceId) {
@@ -146,27 +224,30 @@ export default function LedgersPage() {
   }, [activeWorkspaceId, filtered, linkedSet]);
 
   useEffect(() => {
+    if (isInitializingNewLedgerMode) return;
     if (!selectedLedgerPubkey && defaultLedgerPubkey) {
       setLocalSelectedLedgerPda(defaultLedgerPubkey);
       setLedgerPda(defaultLedgerPubkey);
     }
-  }, [defaultLedgerPubkey, selectedLedgerPubkey, setLedgerPda]);
+  }, [defaultLedgerPubkey, isInitializingNewLedgerMode, selectedLedgerPubkey, setLedgerPda]);
 
   useEffect(() => {
     if (!localSelectedLedgerPda) return;
-    if (!rows.some((row) => row.pubkey === localSelectedLedgerPda)) {
+    if (!workspaceScopedRows.some((row) => row.pubkey === localSelectedLedgerPda)) {
+      if (ledgerPda === localSelectedLedgerPda) {
+        setLedgerPda(null);
+      }
       setLocalSelectedLedgerPda(null);
     }
-  }, [localSelectedLedgerPda, rows]);
+  }, [ledgerPda, localSelectedLedgerPda, setLedgerPda, workspaceScopedRows]);
 
   useEffect(() => {
     if (!selectedLedger) {
       setFormCode("");
       return;
     }
-    const linked = ledgerLinkByPda.get(selectedLedger.pubkey);
-    setFormCode(linked?.ledgerCode ?? selectedLedger.ledgerCode);
-  }, [selectedLedger, ledgerLinkByPda]);
+    setFormCode(selectedLedger.ledgerCode);
+  }, [selectedLedger]);
 
   useEffect(() => {
     const scopeLedgerPda = selectedLedger?.pubkey ?? null;
@@ -225,9 +306,23 @@ export default function LedgersPage() {
         title="Ledgers"
         subtitle="3-pane contextual ledger workspace: choose ledger, review linked customers, then add/edit workspace ledger link."
         actions={
-          <Link href="#initialize-ledger-form">
-            <Button>Initialize new ledger</Button>
-          </Link>
+          <Button
+            onClick={() => {
+              setIsInitializingNewLedgerMode(true);
+              setLocalSelectedLedgerPda(null);
+              setLedgerPda(null);
+              setCustomerId(null);
+              setFormCode("");
+              setInitLedgerCode(DEFAULT_INIT_LEDGER_CODE);
+              setMessage(null);
+              document.getElementById("initialize-ledger-form")?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+            }}
+          >
+            Initialize New Ledger
+          </Button>
         }
       />
 
@@ -256,32 +351,49 @@ export default function LedgersPage() {
           </header>
           <div className="max-h-[620px] overflow-auto p-2">
             {filtered.length === 0 ? (
-              <p className="px-2 py-4 text-xs text-slate-500">No ledgers found.</p>
+              <p className="px-2 py-4 text-xs text-slate-500">
+                {activeWorkspaceId ? "No ledgers found in this workspace." : "Select a workspace to view ledgers."}
+              </p>
             ) : (
               <div className="space-y-2">
                 {filtered.map((row) => {
                   const selected = row.pubkey === selectedLedger?.pubkey;
                   const linked = linkedSet.has(row.pubkey);
                   const inactiveLinked = inactiveLinkedSet.has(row.pubkey);
+                  const ownerWorkspaceIds = activeOwnerWorkspaceIdsByLedgerPda.get(row.pubkey);
+                  const ownedByAnotherWorkspace =
+                    Boolean(ownerWorkspaceIds) &&
+                    Boolean(activeWorkspaceId) &&
+                    Array.from(ownerWorkspaceIds ?? []).some((workspace) => workspace !== activeWorkspaceId);
+                  const disabled = inactiveLinked || (ownedByAnotherWorkspace && !linked);
                   return (
                     <button
                       key={row.pubkey}
                       type="button"
                       className={[
                         "w-full rounded-md border px-3 py-2 text-left transition",
-                        selected
-                          ? "border-slate-700 bg-slate-800 text-white"
-                          : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50",
+                        disabled
+                          ? "border-slate-300 bg-slate-100 text-slate-500"
+                          : selected
+                            ? "border-[var(--badge-border)] bg-[var(--badge-bg)] text-[var(--badge-fg)]"
+                            : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50",
                       ].join(" ")}
                       onClick={() => {
+                        setIsInitializingNewLedgerMode(false);
                         setLocalSelectedLedgerPda(row.pubkey);
                         setLedgerPda(row.pubkey);
                       }}
                     >
-                      <p className="text-xs font-semibold">{row.ledgerCode}</p>
+                      <p className="text-xs font-semibold">{getDisplayLedgerCode(row.pubkey, row.ledgerCode)}</p>
                       <p className="mt-1 font-mono text-[10px] opacity-80">{clampText(row.pubkey, 30)}</p>
                       <p className="mt-1 text-[10px] opacity-80">
-                        {row.customerCount} customers / {row.invoiceCount} invoices {linked ? "- linked (active)" : inactiveLinked ? "- linked (disabled)" : "- not linked"}
+                        {row.customerCount} customers / {row.invoiceCount} invoices {linked
+                          ? "- linked (active)"
+                          : inactiveLinked
+                            ? "- linked (disabled)"
+                            : ownedByAnotherWorkspace
+                              ? "- owned by another workspace"
+                              : "- not linked"}
                       </p>
                     </button>
                   );
@@ -354,11 +466,13 @@ export default function LedgersPage() {
             <h2 className="text-xs font-semibold text-slate-800">Add / Edit Ledger Link</h2>
           </header>
           <div className="space-y-3 p-3">
+            {isInitializingNewLedgerMode ? (
             <div id="initialize-ledger-form" className="rounded-md border border-slate-200 bg-slate-50 p-2 text-[11px]">
               <p className="mb-2 font-semibold text-slate-900">Initialize On-chain Ledger</p>
               <Input
                 label="Ledger code"
                 value={initLedgerCode}
+                placeholder="AR-{REGION}-{YYYY}"
                 onChange={(event) => setInitLedgerCode(event.target.value.toUpperCase())}
               />
               <div className="mt-2 flex items-center gap-2">
@@ -372,9 +486,22 @@ export default function LedgersPage() {
                       return;
                     }
 
+                    const normalizedLedgerCode = parsed.data.ledgerCode.trim().toUpperCase();
+                    if (activeWorkspaceId) {
+                      const codeExists = ledgerLinks.some(
+                        (row) =>
+                          row.workspaceId === activeWorkspaceId &&
+                          row.ledgerCode.trim().toUpperCase() === normalizedLedgerCode,
+                      );
+                      if (codeExists) {
+                        setMessage(`Ledger code '${normalizedLedgerCode}' already exists in this workspace.`);
+                        return;
+                      }
+                    }
+
                     setInitializingLedger(true);
                     try {
-                      const nextLedgerPubkey = await service.initializeLedger({ ledgerCode: initLedgerCode });
+                      const nextLedgerPubkey = await service.initializeLedger({ ledgerCode: normalizedLedgerCode });
                       const ledger = await service.getLedger(nextLedgerPubkey);
 
                       if (activeWorkspaceId && ledger) {
@@ -385,9 +512,11 @@ export default function LedgersPage() {
                           authorityPubkey: ledger.authority,
                         });
                         await refreshWorkspace();
+                      await refreshAccessibleLedgerLinks();
                       }
 
                       setRows(await service.listLedgers());
+                      setIsInitializingNewLedgerMode(false);
                       setLocalSelectedLedgerPda(nextLedgerPubkey);
                       setLedgerPda(nextLedgerPubkey);
                       setMessage(`Ledger initialized: ${nextLedgerPubkey}`);
@@ -398,18 +527,19 @@ export default function LedgersPage() {
                     }
                   }}
                 >
-                  {initializingLedger ? "Initializing..." : "Initialize Ledger"}
+                  {initializingLedger ? "Initializing..." : "Initialize"}
                 </Button>
               </div>
             </div>
+            ) : null}
 
-            {!selectedLedger ? (
+            {!isInitializingNewLedgerMode && !selectedLedger ? (
               <p className="text-xs text-slate-500">Select a ledger from the left pane to edit workspace link settings.</p>
-            ) : (
+            ) : !isInitializingNewLedgerMode && selectedLedger ? (
               <>
                 <div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-[11px]">
                   <p>
-                    <span className="font-semibold">Ledger:</span> {selectedLedger.ledgerCode}
+                    <span className="font-semibold">Ledger:</span> {selectedDisplayLedgerCode ?? selectedLedger.ledgerCode}
                   </p>
                   <p className="mt-1 text-[10px] text-slate-700">
                     <span className="font-semibold">Link status:</span>{" "}
@@ -424,33 +554,36 @@ export default function LedgersPage() {
                 </div>
 
                 <Input
-                  label="Ledger code (workspace link)"
+                  label="Ledger code (on-chain, read-only)"
                   value={formCode}
-                  onChange={(event) => setFormCode(event.target.value.toUpperCase())}
+                  readOnly
                 />
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    disabled={!activeWorkspaceId || !canManageWorkspace || !formCode.trim()}
-                    onClick={async () => {
-                      if (!activeWorkspaceId || !selectedLedger) return;
-                      await controlPlaneService.linkLedgerToWorkspace({
-                        workspaceId: activeWorkspaceId,
-                        ledgerPda: selectedLedger.pubkey,
-                        ledgerCode: formCode.trim(),
-                        authorityPubkey: selectedLedger.authority,
-                        status: "active",
-                      });
-                      await refreshWorkspace();
-                      setMessage(`Saved ledger link for ${selectedLedger.ledgerCode}.`);
-                    }}
-                  >
-                    {linkedSet.has(selectedLedger.pubkey)
-                      ? "Update Link"
-                      : inactiveLinkedSet.has(selectedLedger.pubkey)
-                        ? "Enable Link"
-                        : "Add Link"}
-                  </Button>
+                  {!linkedSet.has(selectedLedger.pubkey) && !inactiveLinkedSet.has(selectedLedger.pubkey) ? (
+                    <Button
+                      disabled={!activeWorkspaceId || !canManageWorkspace || !canActivateSelectedLedgerInWorkspace}
+                      onClick={async () => {
+                        if (!activeWorkspaceId || !selectedLedger) return;
+                        await controlPlaneService.linkLedgerToWorkspace({
+                          workspaceId: activeWorkspaceId,
+                          ledgerPda: selectedLedger.pubkey,
+                          ledgerCode: selectedLedger.ledgerCode,
+                          authorityPubkey: selectedLedger.authority,
+                          status: "active",
+                        });
+                        await refreshWorkspace();
+                        await refreshAccessibleLedgerLinks();
+                        setMessage(`Added link for ${selectedDisplayLedgerCode ?? selectedLedger.ledgerCode}.`);
+                      }}
+                    >
+                      Add Link
+                    </Button>
+                  ) : linkedSet.has(selectedLedger.pubkey) ? (
+                    <Button variant="ghost" disabled>
+                      Linked
+                    </Button>
+                  ) : null}
 
                   <Button
                     variant="ghost"
@@ -468,7 +601,8 @@ export default function LedgersPage() {
                         status: "inactive",
                       });
                       await refreshWorkspace();
-                      setMessage(`Disabled ${selectedLedger.ledgerCode} link in workspace.`);
+                      await refreshAccessibleLedgerLinks();
+                      setMessage(`Disabled ${selectedDisplayLedgerCode ?? selectedLedger.ledgerCode} link in workspace.`);
                     }}
                   >
                     Disable
@@ -476,7 +610,7 @@ export default function LedgersPage() {
 
                   <Button
                     variant="ghost"
-                    disabled={!activeWorkspaceId || !canManageWorkspace || !inactiveLinkedSet.has(selectedLedger.pubkey)}
+                    disabled={!activeWorkspaceId || !canManageWorkspace || !inactiveLinkedSet.has(selectedLedger.pubkey) || !canActivateSelectedLedgerInWorkspace}
                     onClick={async () => {
                       if (!activeWorkspaceId || !selectedLedger) return;
                       await controlPlaneService.setLedgerLinkStatus({
@@ -485,31 +619,11 @@ export default function LedgersPage() {
                         status: "active",
                       });
                       await refreshWorkspace();
-                      setMessage(`Enabled ${selectedLedger.ledgerCode} link in workspace.`);
+                      await refreshAccessibleLedgerLinks();
+                      setMessage(`Enabled ${selectedDisplayLedgerCode ?? selectedLedger.ledgerCode} link in workspace.`);
                     }}
                   >
                     Enable
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    disabled={
-                      !activeWorkspaceId ||
-                      !canManageWorkspace ||
-                      (!linkedSet.has(selectedLedger.pubkey) &&
-                        !inactiveLinkedSet.has(selectedLedger.pubkey))
-                    }
-                    onClick={async () => {
-                      if (!activeWorkspaceId || !selectedLedger) return;
-                      await controlPlaneService.unlinkLedgerFromWorkspace(
-                        activeWorkspaceId,
-                        selectedLedger.pubkey,
-                      );
-                      await refreshWorkspace();
-                      setMessage(`Unlinked ${selectedLedger.ledgerCode} from workspace.`);
-                    }}
-                  >
-                    Unlink
                   </Button>
 
                   <Button
@@ -533,13 +647,19 @@ export default function LedgersPage() {
                   <p className="text-[11px] text-amber-700">Select a workspace in the top bar to save link changes.</p>
                 ) : null}
 
+                {selectedLedgerOwnedByAnotherWorkspace && !linkedSet.has(selectedLedger?.pubkey ?? "") ? (
+                  <p className="text-[11px] text-amber-700">
+                    This ledger is already active in another workspace. Unlink or disable it there before activating it here.
+                  </p>
+                ) : null}
+
                 {selectedLedger && !selectedLedgerHasDuplicateCode ? (
                   <p className="text-[11px] text-slate-500">
                     Disable is available when two or more ledgers share the same ledger code.
                   </p>
                 ) : null}
               </>
-            )}
+            ) : null}
           </div>
         </section>
       </div>

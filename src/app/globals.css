@@ -1,22 +1,157 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8f6f2;
+  --background: #f3f4f6;
   --foreground: #0f172a;
   --surface: #ffffff;
+  --surface-soft: #f8fafc;
+  --surface-strong: #eef2f7;
+  --line: #d8e1eb;
+  --line-strong: #c4d0dd;
+  --muted: #64748b;
+
+  --text-900: #0f172a;
+  --text-800: #1e293b;
+  --text-700: #334155;
+  --text-600: #475569;
+  --text-500: #64748b;
+
+  --link: #1d4ed8;
+  --link-hover: #1e40af;
+
+  --bg-slate-800: #e7edf5;
+  --bg-slate-900: #dbe6f4;
+
+  --selection-bg: #dbeafe;
+  --selection-fg: #0f172a;
+  --shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+
+  --btn-primary-bg: #0f172a;
+  --btn-primary-border: #0f172a;
+  --btn-primary-fg: #f8fafc;
+  --btn-primary-bg-hover: #1f2937;
+
+  --btn-secondary-bg: #e2e8f0;
+  --btn-secondary-border: #cbd5e1;
+  --btn-secondary-fg: #0f172a;
+  --btn-secondary-bg-hover: #d7e0ea;
+
+  --btn-danger-bg: #be123c;
+  --btn-danger-border: #9f1239;
+  --btn-danger-fg: #fff1f2;
+  --btn-danger-bg-hover: #9f1239;
+
+  --btn-ghost-fg: #334155;
+  --btn-ghost-bg-hover: #e2e8f0;
+  --btn-ghost-border-hover: #cbd5e1;
+
+  --badge-bg: #dbeafe;
+  --badge-border: #93c5fd;
+  --badge-fg: #1e3a8a;
+
+  --accent-bg: #dbeafe;
+  --accent-border: #93c5fd;
+  --accent-fg: #1d4ed8;
+  --accent-fg-strong: #1e3a8a;
+
+  --success-bg: #ecfdf5;
+  --success-border: #a7f3d0;
+  --success-fg: #047857;
+  --warning-bg: #fffbeb;
+  --warning-border: #fde68a;
+  --warning-fg: #b45309;
+  --error-bg: #fff1f2;
+  --error-border: #fda4af;
+  --error-fg: #be123c;
+
+  --bg-image:
+    radial-gradient(760px circle at 10% -5%, rgba(206, 213, 224, 0.42) 0%, transparent 42%),
+    radial-gradient(720px circle at 90% -10%, rgba(226, 232, 240, 0.64) 0%, transparent 45%),
+    linear-gradient(180deg, #f8fafc 0%, #f3f4f6 100%);
+}
+
+:root[data-theme="dark-titanium"] {
+  --background: #060a14;
+  --foreground: #e7edff;
+  --surface: #0f1628;
+  --surface-soft: #121c31;
+  --surface-strong: #182742;
+  --line: #253553;
+  --line-strong: #34496f;
+  --muted: #90a2cb;
+
+  --text-900: #eaf1ff;
+  --text-800: #d4def8;
+  --text-700: #beccea;
+  --text-600: #a3b4d9;
+  --text-500: #90a2cb;
+
+  --link: #9fd6ff;
+  --link-hover: #c3e5ff;
+
+  --bg-slate-800: #0a1324;
+  --bg-slate-900: #070f1f;
+
+  --selection-bg: #2b5da1;
+  --selection-fg: #f1f6ff;
+  --shadow: 0 18px 36px rgba(2, 8, 24, 0.34);
+
+  --btn-primary-bg: rgba(87, 212, 255, 0.22);
+  --btn-primary-border: rgba(87, 212, 255, 0.62);
+  --btn-primary-fg: #dff4ff;
+  --btn-primary-bg-hover: rgba(87, 212, 255, 0.32);
+
+  --btn-secondary-bg: #182742;
+  --btn-secondary-border: #34496f;
+  --btn-secondary-fg: #d4def8;
+  --btn-secondary-bg-hover: #1f3352;
+
+  --btn-danger-bg: rgba(244, 63, 94, 0.2);
+  --btn-danger-border: rgba(251, 113, 133, 0.55);
+  --btn-danger-fg: #ffe4ea;
+  --btn-danger-bg-hover: rgba(244, 63, 94, 0.3);
+
+  --btn-ghost-fg: #beccea;
+  --btn-ghost-bg-hover: #182742;
+  --btn-ghost-border-hover: #34496f;
+
+  --badge-bg: rgba(87, 212, 255, 0.18);
+  --badge-border: rgba(87, 212, 255, 0.52);
+  --badge-fg: #dff4ff;
+
+  --accent-bg: rgba(87, 212, 255, 0.2);
+  --accent-border: rgba(87, 212, 255, 0.62);
+  --accent-fg: #b7e8ff;
+  --accent-fg-strong: #dff4ff;
+
+  --success-bg: rgba(16, 185, 129, 0.18);
+  --success-border: rgba(110, 231, 183, 0.52);
+  --success-fg: #bbf7d0;
+  --warning-bg: rgba(245, 158, 11, 0.18);
+  --warning-border: rgba(252, 211, 77, 0.52);
+  --warning-fg: #fde68a;
+  --error-bg: rgba(244, 63, 94, 0.18);
+  --error-border: rgba(251, 113, 133, 0.52);
+  --error-fg: #fecdd3;
+
+  --bg-image:
+    radial-gradient(880px circle at 12% 0%, #10254a 0%, transparent 42%),
+    radial-gradient(980px circle at 100% 0%, #0f3b57 0%, transparent 34%),
+    linear-gradient(180deg, #060a14 0%, #080d19 65%, #070d1a 100%);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans:
-    "IBM Plex Sans", "Avenir Next", "Segoe UI", "Noto Sans", "Liberation Sans", sans-serif;
+    "Sora", "IBM Plex Sans", "Avenir Next", "Segoe UI", "Noto Sans", "Liberation Sans", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", "Menlo", "Monaco", monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  background-image: var(--bg-image);
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.4;
@@ -24,4 +159,167 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+a {
+  color: var(--link);
+}
+
+a:hover {
+  color: var(--link-hover);
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-fg);
+}
+
+.bg-white {
+  background-color: var(--surface) !important;
+}
+
+.bg-slate-50 {
+  background-color: var(--surface-soft) !important;
+}
+
+.bg-slate-50\/60,
+.bg-slate-50\/90 {
+  background-color: var(--surface-soft) !important;
+}
+
+.bg-slate-100 {
+  background-color: var(--surface-strong) !important;
+}
+
+.bg-slate-100\/70 {
+  background-color: var(--surface-strong) !important;
+}
+
+.bg-slate-200 {
+  background-color: var(--surface-strong) !important;
+}
+
+.bg-slate-800 {
+  background-color: var(--bg-slate-800) !important;
+}
+
+.bg-slate-900 {
+  background-color: var(--bg-slate-900) !important;
+}
+
+.text-slate-900 {
+  color: var(--text-900) !important;
+}
+
+.text-slate-800 {
+  color: var(--text-800) !important;
+}
+
+.text-slate-700 {
+  color: var(--text-700) !important;
+}
+
+.text-slate-600 {
+  color: var(--text-600) !important;
+}
+
+.text-slate-500 {
+  color: var(--text-500) !important;
+}
+
+.border-slate-100 {
+  border-color: color-mix(in srgb, var(--line), transparent 30%) !important;
+}
+
+.border-slate-200 {
+  border-color: var(--line) !important;
+}
+
+.border-slate-300 {
+  border-color: var(--line-strong) !important;
+}
+
+.bg-cyan-300\/15 {
+  background-color: var(--accent-bg) !important;
+}
+
+.bg-cyan-300 {
+  background-color: var(--accent-border) !important;
+}
+
+.border-cyan-300\/40,
+.border-cyan-300\/50 {
+  border-color: var(--accent-border) !important;
+}
+
+.text-cyan-200 {
+  color: var(--accent-fg-strong) !important;
+}
+
+.hover\:border-cyan-300\/40:hover {
+  border-color: var(--accent-border) !important;
+}
+
+.hover\:text-cyan-200:hover {
+  color: var(--accent-fg-strong) !important;
+}
+
+.focus\:border-cyan-300\/60:focus {
+  border-color: var(--accent-border) !important;
+}
+
+.group:hover .group-hover\:bg-slate-300 {
+  background-color: var(--line-strong) !important;
+}
+
+.bg-emerald-50,
+.bg-emerald-100 {
+  background-color: var(--success-bg) !important;
+}
+
+.border-emerald-200,
+.border-emerald-300 {
+  border-color: var(--success-border) !important;
+}
+
+.text-emerald-700,
+.text-emerald-900 {
+  color: var(--success-fg) !important;
+}
+
+.bg-amber-50,
+.bg-amber-100 {
+  background-color: var(--warning-bg) !important;
+}
+
+.border-amber-200,
+.border-amber-300 {
+  border-color: var(--warning-border) !important;
+}
+
+.text-amber-700,
+.text-amber-800,
+.text-amber-900 {
+  color: var(--warning-fg) !important;
+}
+
+.bg-rose-50,
+.bg-rose-500\/10 {
+  background-color: var(--error-bg) !important;
+}
+
+.border-rose-200,
+.border-rose-500\/40 {
+  border-color: var(--error-border) !important;
+}
+
+.text-rose-200,
+.text-rose-400,
+.text-rose-600,
+.text-rose-700 {
+  color: var(--error-fg) !important;
+}
+
+.shadow-sm {
+  box-shadow: var(--shadow) !important;
 }

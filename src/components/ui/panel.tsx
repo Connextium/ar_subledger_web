@@ -12,11 +12,11 @@ export function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2">
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2.5">
         <div>
           <h2 className="text-xs font-semibold text-slate-900">{title}</h2>
-          {subtitle ? <p className="mt-0.5 text-[11px] text-slate-600">{subtitle}</p> : null}
+          {subtitle ? <p className="mt-1 text-[11px] text-slate-600">{subtitle}</p> : null}
         </div>
         {actions ? <div className="shrink-0">{actions}</div> : null}
       </header>

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { AppRole, Workspace, WorkspaceLedgerLink } from "@/lib/types/domain";
 import { useAuth } from "@/context/auth-context";
 import { env } from "@/lib/config/env";
@@ -27,38 +27,63 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<AppRole>("admin");
   const [ledgerLinks, setLedgerLinks] = useState<WorkspaceLedgerLink[]>([]);
   const [loading, setLoading] = useState(true);
+  const selectedWorkspaceRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    selectedWorkspaceRef.current = selectedWorkspaceId;
+  }, [selectedWorkspaceId]);
+
+  const loadWorkspaceState = useCallback(
+    async (preferredWorkspaceId?: string | null) => {
+      if (!user) {
+        selectedWorkspaceRef.current = null;
+        setWorkspaces([]);
+        setSelectedWorkspaceId(null);
+        setLedgerLinks([]);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      const workspaceRows = await controlPlaneService.listWorkspaces(user.id);
+      setWorkspaces(workspaceRows);
+
+      const availableIds = new Set(workspaceRows.map((workspace) => workspace.id));
+      const previousSelected = selectedWorkspaceRef.current;
+
+      const resolvedWorkspaceId =
+        preferredWorkspaceId && availableIds.has(preferredWorkspaceId)
+          ? preferredWorkspaceId
+          : previousSelected && availableIds.has(previousSelected)
+            ? previousSelected
+            : workspaceRows[0]?.id ?? null;
+
+      if (selectedWorkspaceRef.current !== resolvedWorkspaceId) {
+        setSelectedWorkspaceId(resolvedWorkspaceId);
+      }
+      selectedWorkspaceRef.current = resolvedWorkspaceId;
+
+      if (resolvedWorkspaceId) {
+        const [nextRole, links] = await Promise.all([
+          controlPlaneService.getRole(resolvedWorkspaceId, user.id),
+          controlPlaneService.listLedgerLinks(resolvedWorkspaceId),
+        ]);
+
+        setRole(nextRole);
+        setLedgerLinks(links);
+      } else {
+        setRole("admin");
+        setLedgerLinks([]);
+      }
+
+      setLoading(false);
+    },
+    [user],
+  );
 
   const refresh = useCallback(async () => {
-    if (!user) {
-      setWorkspaces([]);
-      setSelectedWorkspaceId(null);
-      setLedgerLinks([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const workspaceRows = await controlPlaneService.listWorkspaces(user.id);
-    setWorkspaces(workspaceRows);
-
-    const current = selectedWorkspaceId ?? workspaceRows[0]?.id ?? null;
-    setSelectedWorkspaceId(current);
-
-    if (current) {
-      const [nextRole, links] = await Promise.all([
-        controlPlaneService.getRole(current, user.id),
-        controlPlaneService.listLedgerLinks(current),
-      ]);
-
-      setRole(nextRole);
-      setLedgerLinks(links);
-    } else {
-      setRole("admin");
-      setLedgerLinks([]);
-    }
-
-    setLoading(false);
-  }, [selectedWorkspaceId, user]);
+    await loadWorkspaceState();
+  }, [loadWorkspaceState]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -103,18 +128,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       role,
       ledgerLinks,
       loading,
-      selectWorkspace: setSelectedWorkspaceId,
+      selectWorkspace(workspaceId: string | null) {
+        selectedWorkspaceRef.current = workspaceId;
+        setSelectedWorkspaceId(workspaceId);
+        void loadWorkspaceState(workspaceId);
+      },
       refresh,
       async createWorkspace(name: string) {
         if (!user) return;
         const workspace = await controlPlaneService.createWorkspace(name, user.id);
-        if (workspace) {
-          setSelectedWorkspaceId(workspace.id);
-        }
-        await refresh();
+        await loadWorkspaceState(workspace?.id ?? null);
       },
     }),
-    [ledgerLinks, loading, refresh, role, selectedWorkspaceId, user, workspaces],
+    [ledgerLinks, loading, loadWorkspaceState, refresh, role, selectedWorkspaceId, user, workspaces],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

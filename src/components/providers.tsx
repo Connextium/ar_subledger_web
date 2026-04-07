@@ -5,6 +5,7 @@ import { Buffer } from "buffer";
 import { AuthProvider } from "@/context/auth-context";
 import { EmbeddedWalletProvider } from "@/context/embedded-wallet-context";
 import { WorkspaceProvider } from "@/context/workspace-context";
+import { ThemeProvider } from "@/context/theme-context";
 import { assertRequiredEnv } from "@/lib/config/env";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
@@ -18,10 +19,12 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthProvider>
-      <WorkspaceProvider>
-        <EmbeddedWalletProvider>{children}</EmbeddedWalletProvider>
-      </WorkspaceProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <WorkspaceProvider>
+          <EmbeddedWalletProvider>{children}</EmbeddedWalletProvider>
+        </WorkspaceProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

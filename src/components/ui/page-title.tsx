@@ -10,9 +10,10 @@ export function PageTitle({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-sm font-semibold tracking-tight text-slate-900">{title}</h1>
+        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Subledger Workspace</p>
+        <h1 className="mt-1 text-base font-semibold tracking-tight text-slate-900">{title}</h1>
         {subtitle ? <p className="mt-1 text-[11px] text-slate-600">{subtitle}</p> : null}
       </div>
       {actions ? <div className="flex items-center gap-2">{actions}</div> : null}

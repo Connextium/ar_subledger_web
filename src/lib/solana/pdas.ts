@@ -21,8 +21,11 @@ function u64ToLeBuffer(value: bigint): Buffer {
   return buf;
 }
 
-export function deriveLedgerPda(authority: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([SEEDS.ledger, authority.toBuffer()], PROGRAM_ID);
+export function deriveLedgerPda(authority: PublicKey, ledgerCode: string): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.ledger, authority.toBuffer(), Buffer.from(ledgerCode)],
+    PROGRAM_ID,
+  );
 }
 
 export function deriveCustomerPda(ledger: PublicKey, customerCode: string): [PublicKey, number] {

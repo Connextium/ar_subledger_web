@@ -18,13 +18,13 @@ export function DataTable<T extends { pubkey: string }>({
   emptyLabel: string;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <header className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <header className="border-b border-slate-200 bg-slate-50 px-3 py-2.5">
         <h2 className="text-xs font-semibold text-slate-800">{title}</h2>
       </header>
       <div className="overflow-auto">
         <table className="min-w-full border-collapse text-[11px]">
-          <thead className="bg-slate-100 text-left text-[10px] uppercase tracking-[0.08em] text-slate-500">
+          <thead className="bg-slate-100 text-left text-[10px] uppercase tracking-[0.1em] text-slate-500">
             <tr>
               {columns.map((column) => (
                 <th key={column.key} className="px-3 py-2 font-semibold">
@@ -42,7 +42,7 @@ export function DataTable<T extends { pubkey: string }>({
               </tr>
             ) : (
               rows.map((row) => (
-                <tr key={row.pubkey} className="border-t border-slate-100 text-slate-700">
+                <tr key={row.pubkey} className="border-t border-slate-100 text-slate-700 transition hover:bg-slate-50">
                   {columns.map((column) => (
                     <td key={column.key} className="px-3 py-2 align-top">
                       {column.render(row)}

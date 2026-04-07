@@ -5,24 +5,33 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "@/components/records/data-table";
 import { SearchBar } from "@/components/records/search-bar";
+import { useWorkingContext } from "@/context/working-context";
 import { PageTitle } from "@/components/ui/page-title";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
 import { INVOICE_STATUS_LABEL, type CustomerRecord, type InvoiceRecord } from "@/lib/types/domain";
 import { formatLamportsAmount, formatUnixDate } from "@/lib/utils/format";
+import { controlPlaneService } from "@/services/control-plane-service";
 
 export default function InvoicesPage() {
   const service = useArSubledger();
   const searchParams = useSearchParams();
+  const { workspaceId, ledgerPda: contextLedgerPda, customerId: contextCustomerId } = useWorkingContext();
+
   const ledgerParam = searchParams.get("ledger");
   const customerParam = searchParams.get("customer");
   const statusParam = searchParams.get("status");
 
+  const activeLedgerPda = ledgerParam ?? contextLedgerPda;
+  const selectedCustomerScope = customerParam ?? contextCustomerId;
+
   const [rows, setRows] = useState<InvoiceRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [scopedCustomerPubkeys, setScopedCustomerPubkeys] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState(statusParam ?? "all");
   const [loading, setLoading] = useState(true);
+  const [scopeLoading, setScopeLoading] = useState(false);
 
   useEffect(() => {
     const run = async () => {
@@ -30,11 +39,19 @@ export default function InvoicesPage() {
         setLoading(false);
         return;
       }
+
+      if (!selectedCustomerScope) {
+        setRows([]);
+        setCustomers([]);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
         const [nextInvoices, nextCustomers] = await Promise.all([
-          service.listInvoices(ledgerParam ?? undefined),
-          service.listCustomers(ledgerParam ?? undefined),
+          service.listInvoices(activeLedgerPda ?? undefined),
+          service.listCustomers(activeLedgerPda ?? undefined),
         ]);
         setRows(nextInvoices);
         setCustomers(nextCustomers);
@@ -43,7 +60,45 @@ export default function InvoicesPage() {
       }
     };
     void run();
-  }, [customerParam, ledgerParam, service]);
+  }, [activeLedgerPda, selectedCustomerScope, service]);
+
+  useEffect(() => {
+    const resolveScope = async () => {
+      if (!selectedCustomerScope) {
+        setScopedCustomerPubkeys([]);
+        setScopeLoading(false);
+        return;
+      }
+
+      if (!workspaceId) {
+        setScopedCustomerPubkeys([selectedCustomerScope]);
+        setScopeLoading(false);
+        return;
+      }
+
+      setScopeLoading(true);
+      try {
+        const links = await controlPlaneService.listWorkspaceCustomerLedgerLinks({
+          workspaceId,
+          workspaceCustomerId: selectedCustomerScope,
+        });
+
+        const scopedLinks = links.filter(
+          (row) => row.status === "active" && (!activeLedgerPda || row.ledgerPda === activeLedgerPda),
+        );
+
+        const resolved = Array.from(
+          new Set([selectedCustomerScope, ...scopedLinks.map((row) => row.onchainCustomerPubkey)]),
+        );
+
+        setScopedCustomerPubkeys(resolved);
+      } finally {
+        setScopeLoading(false);
+      }
+    };
+
+    void resolveScope();
+  }, [activeLedgerPda, selectedCustomerScope, workspaceId]);
 
   useEffect(() => {
     setStatusFilter(statusParam ?? "all");
@@ -54,12 +109,15 @@ export default function InvoicesPage() {
   }, [customers]);
 
   const rowsByCustomer = useMemo(() => {
-    if (!customerParam) return rows;
-    const matched = rows.filter((row) => row.customer === customerParam);
-    // Customer query may contain workspace-customer id instead of on-chain customer pubkey.
-    // Fall back to unfiltered rows so invoice list is still visible.
-    return matched.length > 0 ? matched : rows;
-  }, [customerParam, rows]);
+    if (!selectedCustomerScope) return [];
+
+    if (scopedCustomerPubkeys.length === 0) {
+      return rows.filter((row) => row.customer === selectedCustomerScope);
+    }
+
+    const scopedSet = new Set(scopedCustomerPubkeys);
+    return rows.filter((row) => scopedSet.has(row.customer));
+  }, [rows, scopedCustomerPubkeys, selectedCustomerScope]);
 
   const filtered = rowsByCustomer.filter((row) => {
     const q = search.trim().toLowerCase();
@@ -78,7 +136,7 @@ export default function InvoicesPage() {
     <div>
       <PageTitle
         title="Invoices"
-        subtitle="Search and filter invoices with direct navigation to customers and settlement records."
+        subtitle="Showing invoices for the selected customer in current context."
         actions={
           <Link href="/app/workflow#issue-invoice" className="text-[11px] underline decoration-slate-300">
             Issue invoice
@@ -108,13 +166,15 @@ export default function InvoicesPage() {
             ))}
           </select>
         </label>
-        <p className="ml-auto text-[11px] text-slate-500">{loading ? "Loading..." : `${filtered.length} row(s)`}</p>
+        <p className="ml-auto text-[11px] text-slate-500">
+          {loading || scopeLoading ? "Loading..." : `${filtered.length} row(s)`}
+        </p>
       </div>
 
       <DataTable
         title="Invoice Accounts"
         rows={filtered}
-        emptyLabel="No invoices found."
+        emptyLabel={selectedCustomerScope ? "No invoices found for selected customer." : "Select a customer to view invoices."}
         columns={[
           {
             key: "invoiceNo",

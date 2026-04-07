@@ -186,6 +186,33 @@ export class ControlPlaneService {
     }));
   }
 
+  async listAccessibleLedgerLinks(): Promise<WorkspaceLedgerLink[]> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      return state.ledgers.map((ledger) => ({
+        ...ledger,
+        status: ledger.status ?? "active",
+      }));
+    }
+
+    const { data, error } = await supabase
+      .from("ledgers")
+      .select("id,workspace_id,ledger_pda,ledger_code,authority_pubkey,status,created_at")
+      .order("created_at", { ascending: true });
+
+    if (error || !data) return [];
+
+    return data.map((row) => ({
+      id: row.id,
+      workspaceId: row.workspace_id,
+      ledgerPda: row.ledger_pda,
+      ledgerCode: row.ledger_code,
+      authorityPubkey: row.authority_pubkey,
+      status: row.status ?? "active",
+      createdAt: row.created_at,
+    }));
+  }
+
   async createWorkspace(name: string, userId: string): Promise<Workspace | null> {
     if (!isSupabaseConfigured()) {
       const state = readLocalState();
@@ -238,8 +265,20 @@ export class ControlPlaneService {
     authorityPubkey: string;
     status?: "active" | "inactive";
   }): Promise<void> {
+    const normalizedLedgerCode = payload.ledgerCode.trim().toUpperCase();
+
     if (!isSupabaseConfigured()) {
       const state = readLocalState();
+      const conflict = state.ledgers.find(
+        (ledger) =>
+          ledger.workspaceId === payload.workspaceId &&
+          ledger.ledgerPda !== payload.ledgerPda &&
+          ledger.ledgerCode.trim().toUpperCase() === normalizedLedgerCode,
+      );
+      if (conflict) {
+        throw new Error(`Ledger code '${normalizedLedgerCode}' already exists in this workspace.`);
+      }
+
       const existingIndex = state.ledgers.findIndex(
         (ledger) =>
           ledger.workspaceId === payload.workspaceId && ledger.ledgerPda === payload.ledgerPda,
@@ -248,7 +287,7 @@ export class ControlPlaneService {
         id: existingIndex >= 0 ? state.ledgers[existingIndex].id : crypto.randomUUID(),
         workspaceId: payload.workspaceId,
         ledgerPda: payload.ledgerPda,
-        ledgerCode: payload.ledgerCode,
+        ledgerCode: normalizedLedgerCode,
         authorityPubkey: payload.authorityPubkey,
         status: payload.status ?? "active",
         createdAt:
@@ -265,13 +304,39 @@ export class ControlPlaneService {
       return;
     }
 
-    await supabase.from("ledgers").upsert({
-      workspace_id: payload.workspaceId,
-      ledger_pda: payload.ledgerPda,
-      ledger_code: payload.ledgerCode,
-      authority_pubkey: payload.authorityPubkey,
-      status: payload.status ?? "active",
-    });
+    const { data: codeRows, error: codeError } = await supabase
+      .from("ledgers")
+      .select("ledger_pda,ledger_code")
+      .eq("workspace_id", payload.workspaceId);
+
+    if (codeError) {
+      throw new Error(`Failed to validate ledger code uniqueness: ${codeError.message}`);
+    }
+
+    const conflict = (codeRows ?? []).find(
+      (row) =>
+        row.ledger_pda !== payload.ledgerPda &&
+        String(row.ledger_code).trim().toUpperCase() === normalizedLedgerCode,
+    );
+
+    if (conflict) {
+      throw new Error(`Ledger code '${normalizedLedgerCode}' already exists in this workspace.`);
+    }
+
+    const { error } = await supabase.from("ledgers").upsert(
+      {
+        workspace_id: payload.workspaceId,
+        ledger_pda: payload.ledgerPda,
+        ledger_code: normalizedLedgerCode,
+        authority_pubkey: payload.authorityPubkey,
+        status: payload.status ?? "active",
+      },
+      { onConflict: "workspace_id,ledger_pda" },
+    );
+
+    if (error) {
+      throw new Error(`Failed to link ledger to workspace: ${error.message}`);
+    }
   }
 
   async setLedgerLinkStatus(payload: {

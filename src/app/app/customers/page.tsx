@@ -57,6 +57,7 @@ export default function CustomersPage() {
   const [formCode, setFormCode] = useState("");
   const [formLedgerPda, setFormLedgerPda] = useState("");
   const [formOnchainCustomerPubkey, setFormOnchainCustomerPubkey] = useState("");
+  const [isCreateModePinned, setIsCreateModePinned] = useState(false);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isOnchainInitialized, setIsOnchainInitialized] = useState<boolean | null>(null);
@@ -116,10 +117,10 @@ export default function CustomersPage() {
   }, [customerLedgerLinks, ledgerLinks, selectedCustomer]);
 
   useEffect(() => {
-    if (!customerId && filteredCustomers.length > 0) {
+    if (!customerId && filteredCustomers.length > 0 && !isCreateModePinned) {
       setCustomerId(filteredCustomers[0].id);
     }
-  }, [customerId, filteredCustomers, setCustomerId]);
+  }, [customerId, filteredCustomers, isCreateModePinned, setCustomerId]);
 
   useEffect(() => {
     if (!selectedCustomer) {
@@ -269,6 +270,22 @@ export default function CustomersPage() {
     }
   };
 
+  const startCreateMode = () => {
+    setIsCreateModePinned(true);
+    setFormMode("create");
+    setCustomerId(null);
+    setFormCustomerRef("");
+    setFormLegalName("");
+    setFormTaxId("");
+    setFormStatus("active");
+    setFormCode("");
+    setFormLedgerPda("");
+    setFormOnchainCustomerPubkey("");
+    setErrors({});
+    setMessage(null);
+    setIsOnchainInitialized(null);
+  };
+
   return (
     <div className="space-y-3">
       <PageTitle
@@ -277,17 +294,7 @@ export default function CustomersPage() {
         actions={
           <Button
             variant="secondary"
-            onClick={() => {
-              setFormMode("create");
-              setCustomerId(null);
-              setFormCustomerRef("");
-              setFormLegalName("");
-              setFormTaxId("");
-              setFormStatus("active");
-              setFormCode("");
-              setFormLedgerPda("");
-              setFormOnchainCustomerPubkey("");
-            }}
+            onClick={startCreateMode}
           >
             New customer
           </Button>
@@ -344,10 +351,13 @@ export default function CustomersPage() {
                       className={[
                         "w-full rounded-md border px-3 py-2 text-left transition",
                         selected
-                          ? "border-slate-700 bg-slate-800 text-white"
+                          ? "border-[var(--badge-border)] bg-[var(--badge-bg)] text-[var(--badge-fg)]"
                           : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50",
                       ].join(" ")}
-                      onClick={() => setCustomerId(row.id)}
+                      onClick={() => {
+                        setIsCreateModePinned(false);
+                        setCustomerId(row.id);
+                      }}
                     >
                       <p className="text-xs font-semibold">{row.customerRef}</p>
                       <p className="mt-1 text-[11px] opacity-90">{row.legalName}</p>
@@ -449,6 +459,7 @@ export default function CustomersPage() {
                   });
 
                   if (targetCustomer) {
+                    setIsCreateModePinned(false);
                     setCustomerId(targetCustomer.id);
                   }
                 } else if (selectedCustomer) {
@@ -573,7 +584,8 @@ export default function CustomersPage() {
                 }
 
                 await load();
-                setCustomerId(targetCustomer.id);
+                setIsCreateModePinned(false);
+                    setCustomerId(targetCustomer.id);
                 setMessage(formMode === "create" ? "Customer created." : "Customer updated.");
               } catch (error) {
                 setErrors({ form: error instanceof Error ? error.message : "Save failed." });
@@ -680,17 +692,7 @@ export default function CustomersPage() {
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => {
-                    setFormMode("create");
-                    setCustomerId(null);
-                    setFormCustomerRef("");
-                    setFormLegalName("");
-                    setFormTaxId("");
-                    setFormStatus("active");
-                    setFormCode("");
-                    setFormLedgerPda("");
-                    setFormOnchainCustomerPubkey("");
-                  }}
+                  onClick={startCreateMode}
                 >
                   New
                 </Button>

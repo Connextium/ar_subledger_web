@@ -18,9 +18,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const isLogin = mode === "login";
 
   return (
-    <div className="mx-auto mt-20 w-full max-w-sm rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">AR Suite</p>
-      <h1 className="mt-1 text-sm font-semibold text-slate-900">
+    <div className="mx-auto mt-20 w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">AR Suite</p>
+      <h1 className="mt-1 text-base font-semibold text-slate-900">
         {isLogin ? "Sign In" : "Create Account"}
       </h1>
       <p className="mt-1 text-[11px] text-slate-600">
@@ -71,7 +71,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           placeholder="At least 8 characters"
         />
 
-        {error ? <p className="text-[11px] font-medium text-rose-600">{error}</p> : null}
+        {error ? <p className="text-[11px] font-medium text-rose-400">{error}</p> : null}
 
         <Button type="submit" className="w-full" disabled={submitting}>
           {submitting ? "Please wait..." : isLogin ? "Sign in" : "Register"}
