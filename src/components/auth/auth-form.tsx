@@ -18,7 +18,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const isLogin = mode === "login";
 
   return (
-    <div className="mx-auto mt-20 w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="mx-auto w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">AR Suite</p>
       <h1 className="mt-1 text-base font-semibold text-slate-900">
         {isLogin ? "Sign In" : "Create Account"}

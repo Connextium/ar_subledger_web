@@ -15,7 +15,7 @@ export function AuthPageShell({ children }: { children: React.ReactNode }) {
   }, [loading, router, user]);
 
   return (
-    <div className="min-h-screen p-4">
+    <div className="min-h-screen">
       {loading ? (
         <div className="mx-auto mt-24 max-w-sm rounded-xl border border-slate-200 bg-white p-5 text-center text-xs text-slate-500">
           Checking session...
