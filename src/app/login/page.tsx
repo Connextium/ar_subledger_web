@@ -26,7 +26,7 @@ export default function LoginPage() {
             </div>
 
             <p className="mt-auto pt-6 text-[11px] tracking-[0.08em] text-slate-500">
-              The Connextium@2026
+              Joined by Finux Labs & The Connextium@2026
             </p>
           </div>
         </section>
