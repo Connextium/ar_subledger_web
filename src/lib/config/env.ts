@@ -5,6 +5,9 @@ export const env = {
   programId:
     process.env.NEXT_PUBLIC_AR_SUBLEDGER_PROGRAM_ID ??
     "3jRx3EYaVqU6LizE3d9od4Luim9NABWTFUvNe6E68xRg",
+  accountingEngineProgramId:
+    process.env.NEXT_PUBLIC_ACCOUNTING_ENGINE_PROGRAM_ID ??
+    "93p9XxgYZJ6SwMskEASTmBPsGioB1RYbdGHqUKdDvm3q",
 };
 
 export function assertRequiredEnv(): void {

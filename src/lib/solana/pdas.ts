@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { PROGRAM_ID, SEEDS } from "@/lib/solana/constants";
+import { ACCOUNTING_ENGINE_PROGRAM_ID, PROGRAM_ID, SEEDS } from "@/lib/solana/constants";
 
 function u64ToLeBuffer(value: bigint): Buffer {
   if (value < 0n) {
@@ -25,6 +25,35 @@ export function deriveLedgerPda(authority: PublicKey, ledgerCode: string): [Publ
   return PublicKey.findProgramAddressSync(
     [SEEDS.ledger, authority.toBuffer(), Buffer.from(ledgerCode)],
     PROGRAM_ID,
+  );
+}
+
+export function deriveAccountingLedgerPda(
+  authority: PublicKey,
+  ledgerCode: string,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.ledger, authority.toBuffer(), Buffer.from(ledgerCode)],
+    ACCOUNTING_ENGINE_PROGRAM_ID,
+  );
+}
+
+export function deriveGlAccountPda(accountingLedger: PublicKey, code: number): [PublicKey, number] {
+  const codeBuf = Buffer.alloc(4);
+  codeBuf.writeUInt32LE(code, 0);
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.gl, accountingLedger.toBuffer(), codeBuf],
+    ACCOUNTING_ENGINE_PROGRAM_ID,
+  );
+}
+
+export function deriveJournalEntryPda(
+  accountingLedger: PublicKey,
+  entryId: bigint,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.journal, accountingLedger.toBuffer(), u64ToLeBuffer(entryId)],
+    ACCOUNTING_ENGINE_PROGRAM_ID,
   );
 }
 

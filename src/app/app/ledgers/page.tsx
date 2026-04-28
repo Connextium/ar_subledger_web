@@ -35,6 +35,11 @@ export default function LedgersPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [localSelectedLedgerPda, setLocalSelectedLedgerPda] = useState<string | null>(null);
   const [initLedgerCode, setInitLedgerCode] = useState(DEFAULT_INIT_LEDGER_CODE);
+  const [initAccountingLedgerPubkey, setInitAccountingLedgerPubkey] = useState("");
+  const [initArControlAccountCode, setInitArControlAccountCode] = useState("1100");
+  const [initRevenueAccountCode, setInitRevenueAccountCode] = useState("4000");
+  const [initCashAccountCode, setInitCashAccountCode] = useState("1000");
+  const [initWriteoffExpenseAccountCode, setInitWriteoffExpenseAccountCode] = useState("6500");
   const [isInitializingNewLedgerMode, setIsInitializingNewLedgerMode] = useState(false);
   const [initializingLedger, setInitializingLedger] = useState(false);
   const [formCode, setFormCode] = useState("");
@@ -149,6 +154,12 @@ export default function LedgersPage() {
         pubkey: link.ledgerPda,
         authority: link.authorityPubkey,
         ledgerCode: link.ledgerCode,
+        accountingLedger: "",
+        arControlAccountCode: 0,
+        revenueAccountCode: 0,
+        cashAccountCode: 0,
+        writeoffExpenseAccountCode: 0,
+        nextJournalEntryId: 0,
         customerCount: 0,
         invoiceCount: 0,
       };
@@ -475,12 +486,47 @@ export default function LedgersPage() {
                 placeholder="AR-{REGION}-{YYYY}"
                 onChange={(event) => setInitLedgerCode(event.target.value.toUpperCase())}
               />
+              <Input
+                label="Accounting ledger"
+                value={initAccountingLedgerPubkey}
+                placeholder="Accounting ledger pubkey"
+                onChange={(event) => setInitAccountingLedgerPubkey(event.target.value.trim())}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  label="AR control GL"
+                  value={initArControlAccountCode}
+                  onChange={(event) => setInitArControlAccountCode(event.target.value)}
+                />
+                <Input
+                  label="Revenue GL"
+                  value={initRevenueAccountCode}
+                  onChange={(event) => setInitRevenueAccountCode(event.target.value)}
+                />
+                <Input
+                  label="Cash GL"
+                  value={initCashAccountCode}
+                  onChange={(event) => setInitCashAccountCode(event.target.value)}
+                />
+                <Input
+                  label="Write-off GL"
+                  value={initWriteoffExpenseAccountCode}
+                  onChange={(event) => setInitWriteoffExpenseAccountCode(event.target.value)}
+                />
+              </div>
               <div className="mt-2 flex items-center gap-2">
                 <Button
                   disabled={!service || !canManageWorkspace || initializingLedger}
                   onClick={async () => {
                     if (!service) return;
-                    const parsed = initializeLedgerSchema.safeParse({ ledgerCode: initLedgerCode });
+                    const parsed = initializeLedgerSchema.safeParse({
+                      ledgerCode: initLedgerCode,
+                      accountingLedgerPubkey: initAccountingLedgerPubkey,
+                      arControlAccountCode: initArControlAccountCode,
+                      revenueAccountCode: initRevenueAccountCode,
+                      cashAccountCode: initCashAccountCode,
+                      writeoffExpenseAccountCode: initWriteoffExpenseAccountCode,
+                    });
                     if (!parsed.success) {
                       setMessage(parsed.error.issues[0]?.message ?? "Invalid ledger code format.");
                       return;
@@ -501,7 +547,14 @@ export default function LedgersPage() {
 
                     setInitializingLedger(true);
                     try {
-                      const nextLedgerPubkey = await service.initializeLedger({ ledgerCode: normalizedLedgerCode });
+                      const nextLedgerPubkey = await service.initializeLedger({
+                        ledgerCode: normalizedLedgerCode,
+                        accountingLedgerPubkey: parsed.data.accountingLedgerPubkey,
+                        arControlAccountCode: parsed.data.arControlAccountCode,
+                        revenueAccountCode: parsed.data.revenueAccountCode,
+                        cashAccountCode: parsed.data.cashAccountCode,
+                        writeoffExpenseAccountCode: parsed.data.writeoffExpenseAccountCode,
+                      });
                       const ledger = await service.getLedger(nextLedgerPubkey);
 
                       if (activeWorkspaceId && ledger) {

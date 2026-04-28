@@ -46,6 +46,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "ledger.ledger_code",
+                "account": "LedgerConfig"
               }
             ]
           }
@@ -100,6 +105,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "ledger.ledger_code",
+                "account": "LedgerConfig"
               }
             ]
           }
@@ -190,9 +200,16 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "arg",
+                "path": "ledger_code"
               }
             ]
           }
+        },
+        {
+          "name": "accounting_ledger"
         },
         {
           "name": "system_program",
@@ -203,6 +220,22 @@
         {
           "name": "ledger_code",
           "type": "string"
+        },
+        {
+          "name": "ar_control_account_code",
+          "type": "u32"
+        },
+        {
+          "name": "revenue_account_code",
+          "type": "u32"
+        },
+        {
+          "name": "cash_account_code",
+          "type": "u32"
+        },
+        {
+          "name": "writeoff_expense_account_code",
+          "type": "u32"
         }
       ]
     },
@@ -229,6 +262,7 @@
         },
         {
           "name": "ledger",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -245,6 +279,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "ledger.ledger_code",
+                "account": "LedgerConfig"
               }
             ]
           }
@@ -283,6 +322,29 @@
               }
             ]
           }
+        },
+        {
+          "name": "accounting_ledger",
+          "writable": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "journal_entry",
+          "writable": true
+        },
+        {
+          "name": "revenue_gl",
+          "writable": true
+        },
+        {
+          "name": "ar_control_gl",
+          "writable": true
+        },
+        {
+          "name": "accounting_program",
+          "address": "93p9XxgYZJ6SwMskEASTmBPsGioB1RYbdGHqUKdDvm3q"
         },
         {
           "name": "system_program",
@@ -352,6 +414,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "ledger.ledger_code",
+                "account": "LedgerConfig"
               }
             ]
           }
@@ -387,6 +454,29 @@
               }
             ]
           }
+        },
+        {
+          "name": "accounting_ledger",
+          "writable": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "journal_entry",
+          "writable": true
+        },
+        {
+          "name": "ar_control_gl",
+          "writable": true
+        },
+        {
+          "name": "revenue_gl",
+          "writable": true
+        },
+        {
+          "name": "accounting_program",
+          "address": "93p9XxgYZJ6SwMskEASTmBPsGioB1RYbdGHqUKdDvm3q"
         },
         {
           "name": "system_program",
@@ -443,6 +533,7 @@
         },
         {
           "name": "ledger",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -459,6 +550,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "ledger.ledger_code",
+                "account": "LedgerConfig"
               }
             ]
           }
@@ -498,6 +594,29 @@
               }
             ]
           }
+        },
+        {
+          "name": "accounting_ledger",
+          "writable": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "journal_entry",
+          "writable": true
+        },
+        {
+          "name": "cash_gl",
+          "writable": true
+        },
+        {
+          "name": "ar_control_gl",
+          "writable": true
+        },
+        {
+          "name": "accounting_program",
+          "address": "93p9XxgYZJ6SwMskEASTmBPsGioB1RYbdGHqUKdDvm3q"
         },
         {
           "name": "system_program",
@@ -566,6 +685,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "ledger.ledger_code",
+                "account": "LedgerConfig"
               }
             ]
           }
@@ -609,6 +733,7 @@
         },
         {
           "name": "ledger",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -625,6 +750,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "ledger.ledger_code",
+                "account": "LedgerConfig"
               }
             ]
           }
@@ -661,6 +791,29 @@
               }
             ]
           }
+        },
+        {
+          "name": "accounting_ledger",
+          "writable": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "journal_entry",
+          "writable": true
+        },
+        {
+          "name": "writeoff_expense_gl",
+          "writable": true
+        },
+        {
+          "name": "ar_control_gl",
+          "writable": true
+        },
+        {
+          "name": "accounting_program",
+          "address": "93p9XxgYZJ6SwMskEASTmBPsGioB1RYbdGHqUKdDvm3q"
         },
         {
           "name": "system_program",
@@ -708,6 +861,19 @@
         186,
         103,
         18
+      ]
+    },
+    {
+      "name": "GlAccount",
+      "discriminator": [
+        112,
+        3,
+        9,
+        253,
+        125,
+        199,
+        190,
+        165
       ]
     },
     {
@@ -994,11 +1160,72 @@
     },
     {
       "code": 6027,
+      "name": "AccountingLedgerAuthorityMismatch",
+      "msg": "Accounting ledger authority mismatch"
+    },
+    {
+      "code": 6028,
+      "name": "AccountingLedgerMismatch",
+      "msg": "Accounting ledger mismatch"
+    },
+    {
+      "code": 6029,
+      "name": "JournalEntryPdaMismatch",
+      "msg": "Journal entry PDA mismatch"
+    },
+    {
+      "code": 6030,
+      "name": "ArControlAccountMismatch",
+      "msg": "AR control GL account mismatch"
+    },
+    {
+      "code": 6031,
+      "name": "RevenueAccountMismatch",
+      "msg": "Revenue GL account mismatch"
+    },
+    {
+      "code": 6032,
+      "name": "CashAccountMismatch",
+      "msg": "Cash GL account mismatch"
+    },
+    {
+      "code": 6033,
+      "name": "WriteoffExpenseAccountMismatch",
+      "msg": "Writeoff expense GL account mismatch"
+    },
+    {
+      "code": 6034,
       "name": "MathOverflow",
       "msg": "Math overflow"
     }
   ],
   "types": [
+    {
+      "name": "AccountCategory",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Asset"
+          },
+          {
+            "name": "Liability"
+          },
+          {
+            "name": "Equity"
+          },
+          {
+            "name": "Revenue"
+          },
+          {
+            "name": "Expense"
+          }
+        ]
+      }
+    },
     {
       "name": "CreditNote",
       "type": {
@@ -1027,6 +1254,10 @@
           {
             "name": "reason",
             "type": "string"
+          },
+          {
+            "name": "journal_entry_id",
+            "type": "u64"
           },
           {
             "name": "bump",
@@ -1062,6 +1293,10 @@
           },
           {
             "name": "open_amount_after",
+            "type": "u64"
+          },
+          {
+            "name": "journal_entry_id",
             "type": "u64"
           }
         ]
@@ -1176,6 +1411,50 @@
       }
     },
     {
+      "name": "GlAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "code",
+            "type": "u32"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "category",
+            "type": {
+              "defined": {
+                "name": "AccountCategory"
+              }
+            }
+          },
+          {
+            "name": "normal_side",
+            "type": {
+              "defined": {
+                "name": "NormalSide"
+              }
+            }
+          },
+          {
+            "name": "balance",
+            "type": "i128"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "Invoice",
       "type": {
         "kind": "struct",
@@ -1241,6 +1520,10 @@
             "type": "u64"
           },
           {
+            "name": "journal_entry_id",
+            "type": "u64"
+          },
+          {
             "name": "has_writeoff",
             "type": "bool"
           },
@@ -1303,6 +1586,10 @@
           {
             "name": "currency",
             "type": "string"
+          },
+          {
+            "name": "journal_entry_id",
+            "type": "u64"
           }
         ]
       }
@@ -1331,6 +1618,10 @@
           {
             "name": "open_amount_after",
             "type": "u64"
+          },
+          {
+            "name": "journal_entry_id",
+            "type": "u64"
           }
         ]
       }
@@ -1349,6 +1640,26 @@
             "type": "string"
           },
           {
+            "name": "accounting_ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "ar_control_account_code",
+            "type": "u32"
+          },
+          {
+            "name": "revenue_account_code",
+            "type": "u32"
+          },
+          {
+            "name": "cash_account_code",
+            "type": "u32"
+          },
+          {
+            "name": "writeoff_expense_account_code",
+            "type": "u32"
+          },
+          {
             "name": "customer_count",
             "type": "u64"
           },
@@ -1357,8 +1668,29 @@
             "type": "u64"
           },
           {
+            "name": "next_journal_entry_id",
+            "type": "u64"
+          },
+          {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "NormalSide",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Debit"
+          },
+          {
+            "name": "Credit"
           }
         ]
       }
@@ -1391,6 +1723,10 @@
           {
             "name": "payment_reference",
             "type": "string"
+          },
+          {
+            "name": "journal_entry_id",
+            "type": "u64"
           },
           {
             "name": "bump",
@@ -1427,6 +1763,10 @@
           {
             "name": "open_amount_after",
             "type": "u64"
+          },
+          {
+            "name": "journal_entry_id",
+            "type": "u64"
           }
         ]
       }
@@ -1451,6 +1791,10 @@
           {
             "name": "reason",
             "type": "string"
+          },
+          {
+            "name": "journal_entry_id",
+            "type": "u64"
           },
           {
             "name": "bump",

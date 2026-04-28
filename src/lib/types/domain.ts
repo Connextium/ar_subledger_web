@@ -4,6 +4,12 @@ export type LedgerRecord = {
   pubkey: string;
   authority: string;
   ledgerCode: string;
+  accountingLedger: string;
+  arControlAccountCode: number;
+  revenueAccountCode: number;
+  cashAccountCode: number;
+  writeoffExpenseAccountCode: number;
+  nextJournalEntryId: number;
   customerCount: number;
   invoiceCount: number;
 };
@@ -40,6 +46,7 @@ export type InvoiceRecord = {
   status: number;
   receiptSeq: number;
   creditSeq: number;
+  journalEntryId: number;
   hasWriteoff: boolean;
 };
 
@@ -51,6 +58,7 @@ export type ReceiptRecord = {
   amount: number;
   receiptDate: number;
   paymentReference: string;
+  journalEntryId: number;
 };
 
 export type CreditNoteRecord = {
@@ -61,6 +69,7 @@ export type CreditNoteRecord = {
   amount: number;
   creditDate: number;
   reason: string;
+  journalEntryId: number;
 };
 
 export type WriteOffRecord = {
@@ -69,6 +78,7 @@ export type WriteOffRecord = {
   amount: number;
   writeoffDate: number;
   reason: string;
+  journalEntryId: number;
 };
 
 export type ActivityItem = {

@@ -47,6 +47,11 @@ export const initializeLedgerSchema = z.object({
     .min(1)
     .max(24)
     .regex(/^AR-[A-Z]{2,8}-\d{4}$/),
+  accountingLedgerPubkey: z.string().trim().min(32),
+  arControlAccountCode: z.coerce.number().int().positive(),
+  revenueAccountCode: z.coerce.number().int().positive(),
+  cashAccountCode: z.coerce.number().int().positive(),
+  writeoffExpenseAccountCode: z.coerce.number().int().positive(),
 });
 
 export const createCustomerSchema = z.object({

@@ -8,7 +8,14 @@ import type {
   WriteOffRecord,
 } from "@/lib/types/domain";
 
-export type InitializeLedgerInput = { ledgerCode: string };
+export type InitializeLedgerInput = {
+  ledgerCode: string;
+  accountingLedgerPubkey: string;
+  arControlAccountCode: number;
+  revenueAccountCode: number;
+  cashAccountCode: number;
+  writeoffExpenseAccountCode: number;
+};
 
 export type CreateCustomerInput = {
   ledgerPubkey: string;
