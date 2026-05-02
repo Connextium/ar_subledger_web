@@ -121,7 +121,7 @@ type SortOrder = "asc" | "desc";
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <PageTitle title="Journal Entries" />
-        <Button onClick={loadEntries} variant="outline" disabled={isLoading}>
+        <Button onClick={loadEntries} variant="secondary" disabled={isLoading}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Refresh
         </Button>
@@ -245,7 +245,7 @@ type SortOrder = "asc" | "desc";
               </div>
               <div className="flex gap-2">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                   disabled={currentPage === 1}
@@ -258,7 +258,7 @@ type SortOrder = "asc" | "desc";
                   </span>
                 </div>
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                   disabled={currentPage === totalPages}

@@ -231,14 +231,11 @@ class AccountingEngineService {
    */
   async initializeGlAccounts(
     ledgerKey: PublicKey,
-    authority: Keypair | { keypair: Keypair } & { publicKey: PublicKey },
+    authority: EmbeddedWallet | Keypair,
   ): Promise<{ success: boolean; txs: string[]; error?: string }> {
     try {
       const program = await this.getProgram();
       const provider = getProvider() as AnchorProvider;
-
-      // Support EmbeddedWallet or Keypair
-      const keypair = 'keypair' in authority ? authority['keypair'] : authority;
 
       const defaultAccounts = [
         {
@@ -317,7 +314,7 @@ class AccountingEngineService {
               normalSideArg
             )
             .accounts({
-              authority: keypair.publicKey,
+              authority: authority.publicKey,
               ledger: ledgerKey,
               glAccount: glAccountPda,
               systemProgram: PublicKey.default,
@@ -330,7 +327,11 @@ class AccountingEngineService {
           tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
 
           // Sign and send
-          tx.sign(keypair);
+          if ("signTransaction" in authority) {
+            await authority.signTransaction(tx);
+          } else {
+            tx.sign(authority);
+          }
           let txSig: string;
           try {
             txSig = await provider.connection.sendRawTransaction(tx.serialize());
