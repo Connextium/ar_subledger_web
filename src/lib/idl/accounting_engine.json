@@ -1,0 +1,568 @@
+{
+  "address": "93p9XxgYZJ6SwMskEASTmBPsGioB1RYbdGHqUKdDvm3q",
+  "metadata": {
+    "name": "accounting_engine",
+    "version": "0.1.0",
+    "spec": "0.1.0"
+  },
+  "instructions": [
+    {
+      "name": "create_gl_account",
+      "discriminator": [
+        182,
+        28,
+        6,
+        200,
+        110,
+        25,
+        16,
+        234
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "ledger.ledger_code",
+                "account": "GlConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "gl_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "ledger"
+              },
+              {
+                "kind": "arg",
+                "path": "code"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "code",
+          "type": "u32"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "category",
+          "type": {
+            "defined": {
+              "name": "AccountCategory"
+            }
+          }
+        },
+        {
+          "name": "normal_side",
+          "type": {
+            "defined": {
+              "name": "NormalSide"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize_ledger",
+      "discriminator": [
+        104,
+        2,
+        30,
+        235,
+        31,
+        207,
+        174,
+        162
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "arg",
+                "path": "ledger_code"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "ledger_code",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "post_journal_entry",
+      "discriminator": [
+        211,
+        83,
+        68,
+        37,
+        136,
+        151,
+        43,
+        223
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "ledger"
+          ]
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "ledger.ledger_code",
+                "account": "GlConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "journal_entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  106,
+                  111,
+                  117,
+                  114,
+                  110,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "ledger"
+              },
+              {
+                "kind": "arg",
+                "path": "entry_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "entry_id",
+          "type": "u64"
+        },
+        {
+          "name": "external_ref",
+          "type": "string"
+        },
+        {
+          "name": "memo",
+          "type": "string"
+        },
+        {
+          "name": "lines",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "PostingLine"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "GlAccount",
+      "discriminator": [
+        112,
+        3,
+        9,
+        253,
+        125,
+        199,
+        190,
+        165
+      ]
+    },
+    {
+      "name": "GlConfig",
+      "discriminator": [
+        60,
+        236,
+        36,
+        123,
+        19,
+        110,
+        126,
+        128
+      ]
+    },
+    {
+      "name": "JournalEntry",
+      "discriminator": [
+        255,
+        74,
+        177,
+        178,
+        227,
+        112,
+        46,
+        152
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidLedgerCode",
+      "msg": "Invalid ledger code"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidGlAccountName",
+      "msg": "Invalid GL account name"
+    },
+    {
+      "code": 6002,
+      "name": "TooManyPostingLines",
+      "msg": "Too many posting lines"
+    },
+    {
+      "code": 6003,
+      "name": "NoPostingLines",
+      "msg": "No posting lines supplied"
+    },
+    {
+      "code": 6004,
+      "name": "UnbalancedEntry",
+      "msg": "Journal entry is not balanced"
+    },
+    {
+      "code": 6005,
+      "name": "DuplicateAccountCode",
+      "msg": "Duplicate account code in posting lines is not allowed"
+    },
+    {
+      "code": 6006,
+      "name": "RemainingAccountsLengthMismatch",
+      "msg": "Remaining accounts count does not match posting lines"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidGlAccountPda",
+      "msg": "GL account PDA does not match requested account code"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidGlAccountOwner",
+      "msg": "GL account is not owned by the accounting engine program"
+    },
+    {
+      "code": 6009,
+      "name": "GlAccountNotWritable",
+      "msg": "GL account must be writable"
+    },
+    {
+      "code": 6010,
+      "name": "LedgerMismatch",
+      "msg": "GL account belongs to a different ledger"
+    },
+    {
+      "code": 6011,
+      "name": "ExternalReferenceTooLong",
+      "msg": "External reference too long"
+    },
+    {
+      "code": 6012,
+      "name": "MemoTooLong",
+      "msg": "Memo too long"
+    },
+    {
+      "code": 6013,
+      "name": "MathOverflow",
+      "msg": "Math overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "AccountCategory",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Asset"
+          },
+          {
+            "name": "Liability"
+          },
+          {
+            "name": "Equity"
+          },
+          {
+            "name": "Revenue"
+          },
+          {
+            "name": "Expense"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "code",
+            "type": "u32"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "category",
+            "type": {
+              "defined": {
+                "name": "AccountCategory"
+              }
+            }
+          },
+          {
+            "name": "normal_side",
+            "type": {
+              "defined": {
+                "name": "NormalSide"
+              }
+            }
+          },
+          {
+            "name": "balance",
+            "type": "i128"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "ledger_code",
+            "type": "string"
+          },
+          {
+            "name": "journal_entry_count",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "JournalEntry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ledger",
+            "type": "pubkey"
+          },
+          {
+            "name": "entry_id",
+            "type": "u64"
+          },
+          {
+            "name": "external_ref",
+            "type": "string"
+          },
+          {
+            "name": "memo",
+            "type": "string"
+          },
+          {
+            "name": "total_debit",
+            "type": "u64"
+          },
+          {
+            "name": "total_credit",
+            "type": "u64"
+          },
+          {
+            "name": "line_count",
+            "type": "u8"
+          },
+          {
+            "name": "posted_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "NormalSide",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Debit"
+          },
+          {
+            "name": "Credit"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PostingLine",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "account_code",
+            "type": "u32"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "is_debit",
+            "type": "bool"
+          }
+        ]
+      }
+    }
+  ]
+}

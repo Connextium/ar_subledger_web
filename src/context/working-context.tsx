@@ -56,7 +56,8 @@ type WorkingContextAction =
   | { type: "set_customer"; payload: { customerId: string | null } }
   | { type: "set_invoice"; payload: { invoicePubkey: string | null } }
   | { type: "clear_context" }
-  | { type: "clear_invalid_ledger" };
+  | { type: "clear_invalid_ledger" }
+  | { type: "clear_invalid_customer" };
 
 const initialState: WorkingContextState = {
   workspaceId: null,
@@ -114,6 +115,8 @@ function reducer(state: WorkingContextState, action: WorkingContextAction): Work
       return { ...state, ledgerPda: null, customerId: null, invoicePubkey: null };
     case "clear_invalid_ledger":
       return { ...state, ledgerPda: null, customerId: null, invoicePubkey: null };
+    case "clear_invalid_customer":
+      return { ...state, customerId: null, invoicePubkey: null };
     default:
       return state;
   }
@@ -200,16 +203,31 @@ export function WorkingContextProvider({ children }: { children: React.ReactNode
 
     let cancelled = false;
     void (async () => {
-      const rows = await controlPlaneService.listWorkspaceCustomers(workspaceId);
+      const [rows, links] = await Promise.all([
+        controlPlaneService.listWorkspaceCustomers(workspaceId),
+        controlPlaneService.listWorkspaceCustomerLedgerLinks({ workspaceId }),
+      ]);
+
+      const scopedRows = ledgerPda
+        ? rows.filter((customer) =>
+            links.some(
+              (link) =>
+                link.workspaceCustomerId === customer.id &&
+                link.ledgerPda === ledgerPda &&
+                link.status === "active",
+            ),
+          )
+        : rows;
+
       if (!cancelled) {
-        dispatch({ type: "set_customer_options", payload: { customerOptions: rows } });
+        dispatch({ type: "set_customer_options", payload: { customerOptions: scopedRows } });
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, ledgerPda, ledgerLinks]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -244,6 +262,12 @@ export function WorkingContextProvider({ children }: { children: React.ReactNode
       dispatch({ type: "clear_invalid_ledger" });
     }
   }, [workspaceId, ledgerPda, ledgerLinks]);
+
+  useEffect(() => {
+    if (customerId && !customerOptions.some((row) => row.id === customerId)) {
+      dispatch({ type: "clear_invalid_customer" });
+    }
+  }, [customerId, customerOptions]);
 
   const ledgerOptions = useMemo(
     () =>

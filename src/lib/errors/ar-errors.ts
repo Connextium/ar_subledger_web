@@ -32,6 +32,11 @@ const AR_ERROR_MESSAGES: Record<string, string> = {
 export function mapAnchorError(error: unknown): string {
   if (!(error instanceof Error)) return "Transaction failed unexpectedly.";
   const message = error.message;
+
+  if (message.includes("Instruction: RecordReceipt") && message.includes("already in use")) {
+    return "Receipt sequence already exists for this invoice. Increase Seq and try again.";
+  }
+
   for (const [code, pretty] of Object.entries(AR_ERROR_MESSAGES)) {
     if (message.includes(code)) {
       return pretty;

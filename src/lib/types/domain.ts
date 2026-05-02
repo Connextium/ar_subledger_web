@@ -118,6 +118,7 @@ export type WorkspaceLedgerLink = {
   ledgerPda: string;
   ledgerCode: string;
   authorityPubkey: string;
+  onchainLedgerKey?: string | null;
   status: "active" | "inactive";
   createdAt: string;
 };

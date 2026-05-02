@@ -7,21 +7,25 @@ import { SearchBar } from "@/components/records/search-bar";
 import { PageTitle } from "@/components/ui/page-title";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
 import { useWorkspace } from "@/context/workspace-context";
 import { useWorkingContext } from "@/context/working-context";
+import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useRoleGate } from "@/hooks/use-role-gate";
 import { controlPlaneService } from "@/services/control-plane-service";
+import { accountingEngineService } from "@/services/accounting-engine-service";
 import { initializeLedgerSchema } from "@/lib/validation/schemas";
 import type { LedgerRecord, WorkspaceLedgerLink } from "@/lib/types/domain";
 import { clampText } from "@/lib/utils/format";
 
-const DEFAULT_INIT_LEDGER_CODE = "AR-";
+const DEFAULT_INIT_LEDGER_CODE = "";
 
 export default function LedgersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const service = useArSubledger();
+  const { wallet } = useEmbeddedWallet();
   const { canManageWorkspace } = useRoleGate();
   const { selectedWorkspaceId, refresh: refreshWorkspace, ledgerLinks } = useWorkspace();
   const { workspaceId, ledgerPda, customerId, setLedgerPda, setCustomerId } = useWorkingContext();
@@ -42,6 +46,7 @@ export default function LedgersPage() {
   const [initWriteoffExpenseAccountCode, setInitWriteoffExpenseAccountCode] = useState("6500");
   const [isInitializingNewLedgerMode, setIsInitializingNewLedgerMode] = useState(false);
   const [initializingLedger, setInitializingLedger] = useState(false);
+  const [accountingGlOptions, setAccountingGlOptions] = useState<Array<{ value: string; label: string; code: string }>>([]);
   const [formCode, setFormCode] = useState("");
   const [customersByLedger, setCustomersByLedger] = useState<
     Array<{
@@ -80,6 +85,33 @@ export default function LedgersPage() {
     };
     void run();
   }, [service, refreshAccessibleLedgerLinks]);
+
+  useEffect(() => {
+    const run = async () => {
+      if (!wallet) {
+        setAccountingGlOptions([]);
+        return;
+      }
+
+      const accountingGls = await accountingEngineService.listLedgersByAuthority(wallet.publicKey);
+      const nextOptions = accountingGls.map((ledger) => {
+        const pubkey = ledger.publicKey.toBase58();
+        const code = ledger.account.ledgerCode || "";
+        return {
+          value: pubkey,
+          label: `${code || "(no code)"} (${pubkey})`,
+          code,
+        };
+      });
+
+      setAccountingGlOptions(nextOptions);
+      if (!initAccountingLedgerPubkey && nextOptions.length > 0) {
+        setInitAccountingLedgerPubkey(nextOptions[0].value);
+      }
+    };
+
+    void run();
+  }, [initAccountingLedgerPubkey, wallet]);
 
   useEffect(() => {
     void refreshAccessibleLedgerLinks();
@@ -486,12 +518,24 @@ export default function LedgersPage() {
                 placeholder="AR-{REGION}-{YYYY}"
                 onChange={(event) => setInitLedgerCode(event.target.value.toUpperCase())}
               />
-              <Input
-                label="Accounting ledger"
+              <Select
+                label="Base GL"
                 value={initAccountingLedgerPubkey}
-                placeholder="Accounting ledger pubkey"
-                onChange={(event) => setInitAccountingLedgerPubkey(event.target.value.trim())}
+                onChange={(event) => {
+                  setInitAccountingLedgerPubkey(event.target.value);
+                }}
+                options={
+                  accountingGlOptions.length > 0
+                    ? accountingGlOptions
+                    : [{ value: "", label: wallet ? "No Base GL available" : "Wallet not available" }]
+                }
+                disabled={accountingGlOptions.length === 0}
               />
+              {accountingGlOptions.length === 0 ? (
+                <p className="text-[10px] text-slate-500">
+                  Create Base GL first in Base GL ( COA ), then return to select it as Base GL.
+                </p>
+              ) : null}
               <div className="grid grid-cols-2 gap-2">
                 <Input
                   label="AR control GL"
@@ -516,7 +560,7 @@ export default function LedgersPage() {
               </div>
               <div className="mt-2 flex items-center gap-2">
                 <Button
-                  disabled={!service || !canManageWorkspace || initializingLedger}
+                  disabled={!service || !canManageWorkspace || initializingLedger || !initAccountingLedgerPubkey}
                   onClick={async () => {
                     if (!service) return;
                     const parsed = initializeLedgerSchema.safeParse({
@@ -563,6 +607,7 @@ export default function LedgersPage() {
                           ledgerPda: nextLedgerPubkey,
                           ledgerCode: ledger.ledgerCode,
                           authorityPubkey: ledger.authority,
+                          onchainLedgerKey: parsed.data.accountingLedgerPubkey,
                         });
                         await refreshWorkspace();
                       await refreshAccessibleLedgerLinks();

@@ -1,8 +1,9 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import bs58 from "bs58";
 import type { Program } from "@coral-xyz/anchor";
-import { LAMPORTS_PER_SOL, PublicKey, SendTransactionError, SystemProgram } from "@solana/web3.js";
+import { LAMPORTS_PER_SOL, PublicKey, SendTransactionError, SystemProgram, Transaction } from "@solana/web3.js";
 import type { Idl } from "@coral-xyz/anchor";
 import { BN, connection, createArSubledgerProgram } from "@/lib/solana/anchor-client";
 import { ACCOUNTING_ENGINE_PROGRAM_ID } from "@/lib/solana/constants";
@@ -46,16 +47,61 @@ function toNumber(value: BN | number): number {
   return value.toNumber();
 }
 
+function encodeMemcmpBytes(bytes: Uint8Array): string {
+  return bs58.encode(Buffer.from(bytes));
+}
+
+const CONFIRMATION_WAIT_TIMEOUT_MS = 45_000;
+const CONFIRMATION_POLL_INTERVAL_MS = 1_200;
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+const REBROADCAST_INTERVAL_MS = readPositiveIntEnv(
+  "NEXT_PUBLIC_SOLANA_REBROADCAST_INTERVAL_MS",
+  2_000,
+);
+
+/**
+ * Derives the Anchor discriminator for an account type.
+ * Anchor uses the first 8 bytes of sha256("account:<AccountName>")
+ */
+async function deriveDiscriminator(accountName: string): Promise<Uint8Array> {
+  const data = new TextEncoder().encode(`account:${accountName}`);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return new Uint8Array(hashBuffer.slice(0, 8));
+}
+
 export class ArSubledgerService
   implements LedgerService, CustomerService, InvoiceService, SettlementService
 {
   private readonly program: Program<Idl>;
   private readonly accountNs: any;
   private static readonly MIN_PAYER_LAMPORTS = Math.floor(0.02 * LAMPORTS_PER_SOL);
+  private customerDiscriminator: Uint8Array | null = null;
+  private invoiceDiscriminator: Uint8Array | null = null;
 
   constructor(private readonly wallet: EmbeddedWallet) {
     this.program = createArSubledgerProgram(wallet);
     this.accountNs = this.program.account as any;
+  }
+
+  private async getCustomerDiscriminator(): Promise<Uint8Array> {
+    if (!this.customerDiscriminator) {
+      this.customerDiscriminator = await deriveDiscriminator("Customer");
+    }
+    return this.customerDiscriminator;
+  }
+
+  private async getInvoiceDiscriminator(): Promise<Uint8Array> {
+    if (!this.invoiceDiscriminator) {
+      this.invoiceDiscriminator = await deriveDiscriminator("Invoice");
+    }
+    return this.invoiceDiscriminator;
   }
 
   private async ensureWalletFunded(minLamports = ArSubledgerService.MIN_PAYER_LAMPORTS): Promise<void> {
@@ -89,6 +135,152 @@ export class ArSubledgerService
       }
       await this.ensureWalletFunded();
       return operation();
+    }
+  }
+
+  private isAccountDecodeRangeError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("trying to access beyond buffer length") ||
+      msg.includes("out of range index") ||
+      msg.includes("failed to decode")
+    );
+  }
+
+  private async safeAccountAll<T>(accountName: string, fetcher: () => Promise<T[]>): Promise<T[]> {
+    try {
+      return await fetcher();
+    } catch (error) {
+      if (!this.isAccountDecodeRangeError(error)) {
+        throw error;
+      }
+
+      console.warn(
+        `[ArSubledgerService] Ignoring ${accountName} scan due to account decode mismatch (likely stale local validator data).`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  private async sendAndConfirmTransaction(
+    buildTransaction: () => Promise<Transaction>,
+    onSubmitted?: (signature: string) => void,
+  ): Promise<string> {
+    const transaction = await buildTransaction();
+    transaction.feePayer = this.wallet.publicKey;
+
+    const latestBlockhash = await connection.getLatestBlockhash("confirmed");
+    transaction.recentBlockhash = latestBlockhash.blockhash;
+
+    const signedTransaction = await this.wallet.signTransaction(transaction);
+    const serializedTransaction = signedTransaction.serialize();
+    const signature = await connection.sendRawTransaction(serializedTransaction, {
+      preflightCommitment: "confirmed",
+      skipPreflight: false,
+    });
+
+    onSubmitted?.(signature);
+
+    try {
+      const start = Date.now();
+      let lastRebroadcastAt = start;
+
+      while (Date.now() - start < CONFIRMATION_WAIT_TIMEOUT_MS) {
+        const status = await connection.getSignatureStatus(signature, {
+          searchTransactionHistory: true,
+        });
+
+        if (status.value?.err) {
+          throw new Error(
+            `Transaction ${signature} failed on-chain: ${JSON.stringify(status.value.err)}`,
+          );
+        }
+
+        if (
+          status.value?.confirmationStatus === "confirmed" ||
+          status.value?.confirmationStatus === "finalized"
+        ) {
+          return signature;
+        }
+
+        const currentBlockHeight = await connection.getBlockHeight("confirmed");
+        if (currentBlockHeight > latestBlockhash.lastValidBlockHeight) {
+          throw new Error(
+            `Transaction ${signature} expired before confirmation (blockhash no longer valid).`,
+          );
+        }
+
+        if (Date.now() - lastRebroadcastAt >= REBROADCAST_INTERVAL_MS) {
+          try {
+            await connection.sendRawTransaction(serializedTransaction, {
+              skipPreflight: true,
+              maxRetries: 0,
+            });
+          } catch {
+            // Ignore rebroadcast errors and keep polling status.
+          }
+          lastRebroadcastAt = Date.now();
+        }
+
+        await new Promise((resolve) => {
+          setTimeout(resolve, CONFIRMATION_POLL_INTERVAL_MS);
+        });
+      }
+
+      throw new Error(`Confirmation timed out after ${CONFIRMATION_WAIT_TIMEOUT_MS / 1000}s`);
+    } catch (error) {
+      const status = await connection.getSignatureStatus(signature, {
+        searchTransactionHistory: true,
+      });
+      const statusSummary = status.value
+        ? JSON.stringify({
+            confirmationStatus: status.value.confirmationStatus,
+            confirmations: status.value.confirmations,
+            err: status.value.err,
+            slot: status.value.slot,
+          })
+        : "not found on current RPC";
+      const message = error instanceof Error ? error.message : String(error);
+      const rpcEndpoint = connection.rpcEndpoint;
+      throw new Error(
+        `Transaction ${signature} was submitted but confirmation is unresolved. RPC endpoint: ${rpcEndpoint}. RPC status: ${statusSummary}. ${message}. Verify with: solana confirm ${signature} --url ${rpcEndpoint}`,
+      );
+    }
+  }
+
+  /**
+   * Fetch accounts filtered by a ledger pubkey using getProgramAccounts with memcmp.
+   * The ledger field is at offset 8 (after the 8-byte Anchor discriminator).
+   * This is much more efficient than fetching all accounts client-side.
+   */
+  private async getAccountsByLedger(
+    programId: PublicKey,
+    ledgerPubkey: PublicKey,
+    discriminator: number[],
+  ) {
+    try {
+      const accounts = await connection.getProgramAccounts(programId, {
+        filters: [
+          {
+            memcmp: {
+              offset: 8, // After 8-byte discriminator
+              bytes: ledgerPubkey.toBase58(),
+            },
+          },
+          {
+            memcmp: {
+              offset: 0, // Discriminator at offset 0
+              bytes: encodeMemcmpBytes(Uint8Array.from(discriminator)),
+            },
+          },
+        ],
+      });
+      return accounts;
+    } catch (error) {
+      console.warn(`[ArSubledgerService] Failed to fetch accounts by ledger:`, error);
+      return [];
     }
   }
 
@@ -212,28 +404,32 @@ export class ArSubledgerService
     const postingAccounts = this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
 
     await this.executeWithFundingRetry(async () => {
-      await this.program.methods
-        .issueInvoice(
-          input.invoiceNo,
-          new BN(input.amountMinor),
-          new BN(input.issueDateUnix),
-          new BN(input.dueDateUnix),
-          input.currency,
-          input.description,
-        )
-        .accounts({
-          authority: this.wallet.publicKey,
-          ledger,
-          customer,
-          invoice: invoicePda,
-          accountingLedger: postingAccounts.accountingLedger,
-          journalEntry: postingAccounts.journalEntry,
-          arControlGl: postingAccounts.arControlGl,
-          revenueGl: postingAccounts.revenueGl,
-          accountingProgram: postingAccounts.accountingProgram,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
+      await this.sendAndConfirmTransaction(
+        () =>
+          this.program.methods
+            .issueInvoice(
+              input.invoiceNo,
+              new BN(input.amountMinor),
+              new BN(input.issueDateUnix),
+              new BN(input.dueDateUnix),
+              input.currency,
+              input.description,
+            )
+            .accounts({
+              authority: this.wallet.publicKey,
+              ledger,
+              customer,
+              invoice: invoicePda,
+              accountingLedger: postingAccounts.accountingLedger,
+              journalEntry: postingAccounts.journalEntry,
+              arControlGl: postingAccounts.arControlGl,
+              revenueGl: postingAccounts.revenueGl,
+              accountingProgram: postingAccounts.accountingProgram,
+              systemProgram: SystemProgram.programId,
+            })
+            .transaction(),
+        input.onSubmitted,
+      );
     });
 
     return invoicePda.toBase58();
@@ -247,28 +443,32 @@ export class ArSubledgerService
     const postingAccounts = this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
 
     await this.executeWithFundingRetry(async () => {
-      await this.program.methods
-        .recordReceipt(
-          new BN(input.receiptSeq),
-          input.receiptNo,
-          new BN(input.amountMinor),
-          new BN(input.receiptDateUnix),
-          input.paymentReference,
-        )
-        .accounts({
-          authority: this.wallet.publicKey,
-          ledger,
-          customer,
-          invoice,
-          receipt: receiptPda,
-          accountingLedger: postingAccounts.accountingLedger,
-          journalEntry: postingAccounts.journalEntry,
-          cashGl: postingAccounts.cashGl,
-          arControlGl: postingAccounts.arControlGl,
-          accountingProgram: postingAccounts.accountingProgram,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
+      await this.sendAndConfirmTransaction(
+        () =>
+          this.program.methods
+            .recordReceipt(
+              new BN(input.receiptSeq),
+              input.receiptNo,
+              new BN(input.amountMinor),
+              new BN(input.receiptDateUnix),
+              input.paymentReference,
+            )
+            .accounts({
+              authority: this.wallet.publicKey,
+              ledger,
+              customer,
+              invoice,
+              receipt: receiptPda,
+              accountingLedger: postingAccounts.accountingLedger,
+              journalEntry: postingAccounts.journalEntry,
+              cashGl: postingAccounts.cashGl,
+              arControlGl: postingAccounts.arControlGl,
+              accountingProgram: postingAccounts.accountingProgram,
+              systemProgram: SystemProgram.programId,
+            })
+            .transaction(),
+        input.onSubmitted,
+      );
     });
 
     return receiptPda.toBase58();
@@ -282,28 +482,32 @@ export class ArSubledgerService
     const postingAccounts = this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
 
     await this.executeWithFundingRetry(async () => {
-      await this.program.methods
-        .issueCreditNote(
-          new BN(input.creditSeq),
-          input.creditNo,
-          new BN(input.amountMinor),
-          new BN(input.creditDateUnix),
-          input.reason,
-        )
-        .accounts({
-          authority: this.wallet.publicKey,
-          ledger,
-          customer,
-          invoice,
-          creditNote: creditPda,
-          accountingLedger: postingAccounts.accountingLedger,
-          journalEntry: postingAccounts.journalEntry,
-          revenueGl: postingAccounts.revenueGl,
-          arControlGl: postingAccounts.arControlGl,
-          accountingProgram: postingAccounts.accountingProgram,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
+      await this.sendAndConfirmTransaction(
+        () =>
+          this.program.methods
+            .issueCreditNote(
+              new BN(input.creditSeq),
+              input.creditNo,
+              new BN(input.amountMinor),
+              new BN(input.creditDateUnix),
+              input.reason,
+            )
+            .accounts({
+              authority: this.wallet.publicKey,
+              ledger,
+              customer,
+              invoice,
+              creditNote: creditPda,
+              accountingLedger: postingAccounts.accountingLedger,
+              journalEntry: postingAccounts.journalEntry,
+              revenueGl: postingAccounts.revenueGl,
+              arControlGl: postingAccounts.arControlGl,
+              accountingProgram: postingAccounts.accountingProgram,
+              systemProgram: SystemProgram.programId,
+            })
+            .transaction(),
+        input.onSubmitted,
+      );
     });
 
     return creditPda.toBase58();
@@ -317,22 +521,26 @@ export class ArSubledgerService
     const postingAccounts = this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
 
     await this.executeWithFundingRetry(async () => {
-      await this.program.methods
-        .writeOffInvoice(new BN(input.amountMinor), new BN(input.writeoffDateUnix), input.reason)
-        .accounts({
-          authority: this.wallet.publicKey,
-          ledger,
-          customer,
-          invoice,
-          writeoff: writeoffPda,
-          accountingLedger: postingAccounts.accountingLedger,
-          journalEntry: postingAccounts.journalEntry,
-          writeoffExpenseGl: postingAccounts.writeoffExpenseGl,
-          arControlGl: postingAccounts.arControlGl,
-          accountingProgram: postingAccounts.accountingProgram,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
+      await this.sendAndConfirmTransaction(
+        () =>
+          this.program.methods
+            .writeOffInvoice(new BN(input.amountMinor), new BN(input.writeoffDateUnix), input.reason)
+            .accounts({
+              authority: this.wallet.publicKey,
+              ledger,
+              customer,
+              invoice,
+              writeoff: writeoffPda,
+              accountingLedger: postingAccounts.accountingLedger,
+              journalEntry: postingAccounts.journalEntry,
+              writeoffExpenseGl: postingAccounts.writeoffExpenseGl,
+              arControlGl: postingAccounts.arControlGl,
+              accountingProgram: postingAccounts.accountingProgram,
+              systemProgram: SystemProgram.programId,
+            })
+            .transaction(),
+        input.onSubmitted,
+      );
     });
 
     return writeoffPda.toBase58();
@@ -344,22 +552,28 @@ export class ArSubledgerService
     const invoice = new PublicKey(input.invoicePubkey);
 
     await this.executeWithFundingRetry(async () => {
-      await this.program.methods
-        .closeInvoice()
-        .accounts({
-          authority: this.wallet.publicKey,
-          ledger,
-          customer,
-          invoice,
-        })
-        .rpc();
+      await this.sendAndConfirmTransaction(
+        () =>
+          this.program.methods
+            .closeInvoice()
+            .accounts({
+              authority: this.wallet.publicKey,
+              ledger,
+              customer,
+              invoice,
+            })
+            .transaction(),
+        input.onSubmitted,
+      );
     });
 
     return input.invoicePubkey;
   }
 
   async listLedgers(): Promise<LedgerRecord[]> {
-    const rows = (await this.accountNs.ledgerConfig.all()) as any[];
+    const rows = (await this.safeAccountAll("ledgerConfig", () =>
+      this.accountNs.ledgerConfig.all(),
+    )) as any[];
     return rows.map((row) => this.mapLedgerRecord(row.publicKey.toBase58(), row.account));
   }
 
@@ -373,7 +587,53 @@ export class ArSubledgerService
   }
 
   async listCustomers(ledgerPubkey?: string): Promise<CustomerRecord[]> {
-    const rows = (await this.accountNs.customer.all()) as any[];
+    // If ledgerPubkey is specified, use optimized filtering via getProgramAccounts
+    if (ledgerPubkey) {
+      try {
+        const ledgerKey = new PublicKey(ledgerPubkey);
+        const customerDiscriminator = await this.getCustomerDiscriminator();
+
+        const accounts = await connection.getProgramAccounts(this.program.programId, {
+          filters: [
+            {
+              memcmp: {
+                offset: 0,
+                bytes: encodeMemcmpBytes(customerDiscriminator),
+              },
+            },
+            {
+              memcmp: {
+                offset: 8, // After 8-byte discriminator
+                bytes: ledgerKey.toBase58(),
+              },
+            },
+          ],
+        });
+
+        return accounts.map((account) => {
+          const accountData = this.program.coder.accounts.decode("customer", account.account.data);
+          return {
+            pubkey: account.pubkey.toBase58(),
+            ledger: accountData.ledger.toBase58(),
+            customerCode: accountData.customerCode,
+            customerName: accountData.customerName,
+            status: accountData.status,
+            creditLimit: toNumber(accountData.creditLimit),
+            totalOutstanding: toNumber(accountData.totalOutstanding),
+            totalInvoiced: toNumber(accountData.totalInvoiced),
+            totalPaid: toNumber(accountData.totalPaid),
+            totalCredited: toNumber(accountData.totalCredited),
+            totalWrittenOff: toNumber(accountData.totalWrittenOff),
+            invoiceCount: toNumber(accountData.invoiceCount),
+          };
+        });
+      } catch (error) {
+        console.warn(`[ArSubledgerService] Optimized customer listing failed, falling back to full scan:`, error);
+      }
+    }
+
+    // Fallback: fetch all customers and filter client-side
+    const rows = (await this.safeAccountAll("customer", () => this.accountNs.customer.all())) as any[];
     return rows
       .map((row) => ({
         pubkey: row.publicKey.toBase58(),
@@ -415,7 +675,59 @@ export class ArSubledgerService
   }
 
   async listInvoices(ledgerPubkey?: string): Promise<InvoiceRecord[]> {
-    const rows = (await this.accountNs.invoice.all()) as any[];
+    // If ledgerPubkey is specified, use optimized filtering via getProgramAccounts
+    if (ledgerPubkey) {
+      try {
+        const ledgerKey = new PublicKey(ledgerPubkey);
+        const invoiceDiscriminator = await this.getInvoiceDiscriminator();
+
+        const accounts = await connection.getProgramAccounts(this.program.programId, {
+          filters: [
+            {
+              memcmp: {
+                offset: 0,
+                bytes: encodeMemcmpBytes(invoiceDiscriminator),
+              },
+            },
+            {
+              memcmp: {
+                offset: 8, // After 8-byte discriminator
+                bytes: ledgerKey.toBase58(),
+              },
+            },
+          ],
+        });
+
+        return accounts.map((account) => {
+          const accountData = this.program.coder.accounts.decode("invoice", account.account.data);
+          return {
+            pubkey: account.pubkey.toBase58(),
+            ledger: accountData.ledger.toBase58(),
+            customer: accountData.customer.toBase58(),
+            invoiceNo: accountData.invoiceNo,
+            originalAmount: toNumber(accountData.originalAmount),
+            openAmount: toNumber(accountData.openAmount),
+            paidAmount: toNumber(accountData.paidAmount),
+            creditedAmount: toNumber(accountData.creditedAmount),
+            writtenOffAmount: toNumber(accountData.writtenOffAmount),
+            currency: accountData.currency,
+            description: accountData.description,
+            issueDate: toNumber(accountData.issueDate),
+            dueDate: toNumber(accountData.dueDate),
+            status: accountData.status,
+            receiptSeq: toNumber(accountData.receiptSeq),
+            creditSeq: toNumber(accountData.creditSeq),
+            journalEntryId: toNumber(accountData.journalEntryId),
+            hasWriteoff: accountData.hasWriteoff,
+          };
+        });
+      } catch (error) {
+        console.warn(`[ArSubledgerService] Optimized invoice listing failed, falling back to full scan:`, error);
+      }
+    }
+
+    // Fallback: fetch all invoices and filter client-side
+    const rows = (await this.safeAccountAll("invoice", () => this.accountNs.invoice.all())) as any[];
     return rows
       .map((row) => ({
         pubkey: row.publicKey.toBase58(),
@@ -469,7 +781,7 @@ export class ArSubledgerService
   }
 
   async listReceipts(invoicePubkey?: string): Promise<ReceiptRecord[]> {
-    const rows = (await this.accountNs.receipt.all()) as any[];
+    const rows = (await this.safeAccountAll("receipt", () => this.accountNs.receipt.all())) as any[];
     return rows
       .map((row) => ({
         pubkey: row.publicKey.toBase58(),
@@ -485,7 +797,9 @@ export class ArSubledgerService
   }
 
   async listCreditNotes(invoicePubkey?: string): Promise<CreditNoteRecord[]> {
-    const rows = (await this.accountNs.creditNote.all()) as any[];
+    const rows = (await this.safeAccountAll("creditNote", () =>
+      this.accountNs.creditNote.all(),
+    )) as any[];
     return rows
       .map((row) => ({
         pubkey: row.publicKey.toBase58(),
@@ -501,7 +815,7 @@ export class ArSubledgerService
   }
 
   async listWriteOffs(invoicePubkey?: string): Promise<WriteOffRecord[]> {
-    const rows = (await this.accountNs.writeOff.all()) as any[];
+    const rows = (await this.safeAccountAll("writeOff", () => this.accountNs.writeOff.all())) as any[];
     return rows
       .map((row) => ({
         pubkey: row.publicKey.toBase58(),

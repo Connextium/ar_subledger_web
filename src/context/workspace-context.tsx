@@ -3,8 +3,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { AppRole, Workspace, WorkspaceLedgerLink } from "@/lib/types/domain";
 import { useAuth } from "@/context/auth-context";
-import { env } from "@/lib/config/env";
-import { supabase } from "@/lib/supabase/client";
 import { controlPlaneService } from "@/services/control-plane-service";
 
 type WorkspaceContextValue = {
@@ -89,37 +87,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
-
-  useEffect(() => {
-    if (!env.supabaseUrl || !env.supabaseAnonKey) return;
-    if (!user || !selectedWorkspaceId) return;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const accessToken = session?.access_token;
-        if (!accessToken || cancelled) return;
-
-        await fetch("/api/wallets/bootstrap", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({ workspaceId: selectedWorkspaceId }),
-        });
-      } catch {
-        // Phase C bootstrap failures should not block workspace load.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedWorkspaceId, user]);
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({

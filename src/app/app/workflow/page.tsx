@@ -11,6 +11,7 @@ import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
 import { useWorkingContext } from "@/context/working-context";
 import { controlPlaneService } from "@/services/control-plane-service";
+import { accountingEngineService } from "@/services/accounting-engine-service";
 import {
   closeInvoiceSchema,
   issueCreditNoteSchema,
@@ -26,8 +27,10 @@ import type {
   ReceiptRecord,
   WorkspaceCustomer,
   WorkspaceCustomerLedgerLink,
+  WorkspaceLedgerLink,
 } from "@/lib/types/domain";
 import { formatLamportsAmount, parseAmountToMinor } from "@/lib/utils/format";
+import { supabase } from "@/lib/supabase/client";
 
 function toUnix(date: string): number {
   return Math.floor(new Date(date).getTime() / 1000);
@@ -39,6 +42,8 @@ function toMessage(error: unknown): string {
 }
 
 type FormErrors = Record<string, string>;
+
+const BYPASS_POSTING_LINE_PERSISTENCE = true;
 
 export default function WorkflowPage() {
   const service = useArSubledger();
@@ -53,6 +58,7 @@ export default function WorkflowPage() {
   const [ledgers, setLedgers] = useState<LedgerRecord[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [workspaceCustomers, setWorkspaceCustomers] = useState<WorkspaceCustomer[]>([]);
+  const [workspaceLedgerLinks, setWorkspaceLedgerLinks] = useState<WorkspaceLedgerLink[]>([]);
   const [customerLinks, setCustomerLinks] = useState<WorkspaceCustomerLedgerLink[]>([]);
   const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
   const [credits, setCredits] = useState<CreditNoteRecord[]>([]);
@@ -61,6 +67,7 @@ export default function WorkflowPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<string | null>(null);
+  const [inFlightTransactions, setInFlightTransactions] = useState<Set<string>>(new Set());
 
   const [invoiceNo, setInvoiceNo] = useState("");
   const [invoiceAmount, setInvoiceAmount] = useState("");
@@ -125,6 +132,15 @@ export default function WorkflowPage() {
     [ledgerPda, ledgers],
   );
 
+  const selectedWorkspaceLedgerLink = useMemo(() => {
+    if (!activeWorkspaceId || !ledgerPda) return null;
+    return (
+      workspaceLedgerLinks.find(
+        (row) => row.workspaceId === activeWorkspaceId && row.ledgerPda === ledgerPda,
+      ) ?? null
+    );
+  }, [activeWorkspaceId, ledgerPda, workspaceLedgerLinks]);
+
   const currentSignerPubkey = wallet?.publicKey.toBase58() ?? null;
   const hasLedgerAuthorityMismatch = Boolean(
     selectedLedger && currentSignerPubkey && selectedLedger.authority !== currentSignerPubkey,
@@ -147,11 +163,50 @@ export default function WorkflowPage() {
 
   const loadContextModel = async () => {
     if (!activeWorkspaceId) {
+      setWorkspaceLedgerLinks([]);
       setCustomerLinks([]);
       return;
     }
-    const nextLinks = await controlPlaneService.listWorkspaceCustomerLedgerLinks({ workspaceId: activeWorkspaceId });
-    setCustomerLinks(nextLinks);
+
+    const [nextLedgerLinks, nextCustomerLinks] = await Promise.all([
+      controlPlaneService.listLedgerLinks(activeWorkspaceId),
+      controlPlaneService.listWorkspaceCustomerLedgerLinks({ workspaceId: activeWorkspaceId }),
+    ]);
+
+    setWorkspaceLedgerLinks(nextLedgerLinks);
+    setCustomerLinks(nextCustomerLinks);
+  };
+
+  const persistPostingLines = async (
+    journalEntryId: number,
+    postingLines: Array<{ accountCode: number; amount: number; isDebit: boolean }>,
+  ) => {
+    if (BYPASS_POSTING_LINE_PERSISTENCE) {
+      return;
+    }
+
+    if (!selectedWorkspaceLedgerLink?.id) {
+      throw new Error("Selected ledger link not found in workspace");
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error("Authentication token is missing");
+    }
+
+    await accountingEngineService.saveJournalEntryPostingLines(
+      selectedWorkspaceLedgerLink.id,
+      BigInt(journalEntryId),
+      postingLines.map((line) => ({
+        accountCode: line.accountCode,
+        amount: BigInt(line.amount),
+        isDebit: line.isDebit,
+      })),
+      session.access_token,
+    );
   };
 
   useEffect(() => {
@@ -204,8 +259,113 @@ export default function WorkflowPage() {
     }
   }, [ledgerPda, customerId, activeLinksForLedger, setCustomerId]);
 
+  useEffect(() => {
+    if (!selectedInvoice) return;
+    const nextReceiptSeq = Math.max(1, selectedInvoice.receiptSeq + 1);
+    setReceiptSeq(String(nextReceiptSeq));
+  }, [selectedInvoice]);
+
   const showIssueInvoice = hashAction === "issue-invoice";
   const showSettlementCards = Boolean(selectedInvoice && activeOnchainCustomerPubkey);
+
+  const showSubmittedSignature = (label: string, signature: string) => {
+    setSuccess(`${label} submitted. Signature: ${signature}. Waiting for confirmation...`);
+  };
+
+  const handleRecordReceipt = async () => {
+    setErrors({});
+    setSuccess(null);
+    if (!canWriteTransactions) { setErrors({ form: "Your current role does not allow transaction writes." }); return; }
+    if (!service || !ledgerPda) { setErrors({ form: "Select a ledger in Working Context first." }); return; }
+    if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the ledger first." }); return; }
+    if (!selectedInvoice) { setErrors({ form: "Select an invoice first." }); return; }
+    const txKey = `receipt:${selectedInvoice.pubkey}:${receiptSeq}`;
+    if (inFlightTransactions.has(txKey)) { setErrors({ form: "Receipt already submitted. Wait for confirmation or use a different Seq." }); return; }
+    const expectedNextReceiptSeq = selectedInvoice.receiptSeq + 1;
+    if (Number(receiptSeq) <= selectedInvoice.receiptSeq) {
+      setErrors({ form: `Receipt sequence already used. Use ${expectedNextReceiptSeq} or higher.` });
+      return;
+    }
+    const parsed = recordReceiptSchema.safeParse({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, receiptSeq, receiptNo, amount: receiptAmount, receiptDate, paymentReference });
+    if (!parsed.success) { setErrors({ form: parsed.error.issues[0]?.message ?? "Please fill in all required receipt fields." }); return; }
+    setSubmitting("receipt");
+    setInFlightTransactions(prev => new Set([...prev, txKey]));
+    try {
+      const latestLedger = await service.getLedger(ledgerPda);
+      if (!latestLedger) throw new Error("Ledger account not found");
+      const journalEntryId = latestLedger.nextJournalEntryId;
+      const amountMinor = parseAmountToMinor(receiptAmount);
+      await service.recordReceipt({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, receiptSeq: Number(receiptSeq), receiptNo, amountMinor, receiptDateUnix: toUnix(receiptDate), paymentReference, onSubmitted: (signature) => showSubmittedSignature("Receipt", signature) });
+      await persistPostingLines(journalEntryId, [{ accountCode: latestLedger.cashAccountCode, amount: amountMinor, isDebit: true }, { accountCode: latestLedger.arControlAccountCode, amount: amountMinor, isDebit: false }]);
+      await loadRecords();
+      setSuccess("Receipt recorded");
+    } catch (error) {
+      setErrors({ form: toMessage(error) });
+    } finally {
+      setSubmitting(null);
+      setInFlightTransactions(prev => { const next = new Set(prev); next.delete(txKey); return next; });
+    }
+  };
+
+  const handleIssueCreditNote = async () => {
+    setErrors({});
+    setSuccess(null);
+    if (!canWriteTransactions) { setErrors({ form: "Your current role does not allow transaction writes." }); return; }
+    if (!service || !ledgerPda) { setErrors({ form: "Select a ledger in Working Context first." }); return; }
+    if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the ledger first." }); return; }
+    if (!selectedInvoice) { setErrors({ form: "Select an invoice first." }); return; }
+    const txKey = `credit:${selectedInvoice.pubkey}:${creditSeq}`;
+    if (inFlightTransactions.has(txKey)) { setErrors({ form: "Credit note already submitted. Wait for confirmation or use a different Seq." }); return; }
+    const parsed = issueCreditNoteSchema.safeParse({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, creditSeq, creditNo, amount: creditAmount, creditDate, reason: creditReason });
+    if (!parsed.success) { setErrors({ form: parsed.error.issues[0]?.message ?? "Please fill in all required credit note fields." }); return; }
+    setSubmitting("credit");
+    setInFlightTransactions(prev => new Set([...prev, txKey]));
+    try {
+      const latestLedger = await service.getLedger(ledgerPda);
+      if (!latestLedger) throw new Error("Ledger account not found");
+      const journalEntryId = latestLedger.nextJournalEntryId;
+      const amountMinor = parseAmountToMinor(creditAmount);
+      await service.issueCreditNote({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, creditSeq: Number(creditSeq), creditNo, amountMinor, creditDateUnix: toUnix(creditDate), reason: creditReason, onSubmitted: (signature) => showSubmittedSignature("Credit note", signature) });
+      await persistPostingLines(journalEntryId, [{ accountCode: latestLedger.revenueAccountCode, amount: amountMinor, isDebit: true }, { accountCode: latestLedger.arControlAccountCode, amount: amountMinor, isDebit: false }]);
+      await loadRecords();
+      setSuccess("Credit note issued");
+    } catch (error) {
+      setErrors({ form: toMessage(error) });
+    } finally {
+      setSubmitting(null);
+      setInFlightTransactions(prev => { const next = new Set(prev); next.delete(txKey); return next; });
+    }
+  };
+
+  const handleWriteOffInvoice = async () => {
+    setErrors({});
+    setSuccess(null);
+    if (!canWriteTransactions) { setErrors({ form: "Your current role does not allow transaction writes." }); return; }
+    if (!service || !ledgerPda) { setErrors({ form: "Select a ledger in Working Context first." }); return; }
+    if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the ledger first." }); return; }
+    if (!selectedInvoice) { setErrors({ form: "Select an invoice first." }); return; }
+    const txKey = `writeoff:${selectedInvoice.pubkey}`;
+    if (inFlightTransactions.has(txKey)) { setErrors({ form: "Write-off already submitted. Wait for confirmation." }); return; }
+    const parsed = writeOffSchema.safeParse({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, amount: writeoffAmount, writeoffDate, reason: writeoffReason });
+    if (!parsed.success) { setErrors({ form: parsed.error.issues[0]?.message ?? "Please fill in all required write-off fields." }); return; }
+    setSubmitting("writeoff");
+    setInFlightTransactions(prev => new Set([...prev, txKey]));
+    try {
+      const latestLedger = await service.getLedger(ledgerPda);
+      if (!latestLedger) throw new Error("Ledger account not found");
+      const journalEntryId = latestLedger.nextJournalEntryId;
+      const amountMinor = parseAmountToMinor(writeoffAmount);
+      await service.writeOffInvoice({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, amountMinor, writeoffDateUnix: toUnix(writeoffDate), reason: writeoffReason, onSubmitted: (signature) => showSubmittedSignature("Write-off", signature) });
+      await persistPostingLines(journalEntryId, [{ accountCode: latestLedger.writeoffExpenseAccountCode, amount: amountMinor, isDebit: true }, { accountCode: latestLedger.arControlAccountCode, amount: amountMinor, isDebit: false }]);
+      await loadRecords();
+      setSuccess("Invoice written off");
+    } catch (error) {
+      setErrors({ form: toMessage(error) });
+    } finally {
+      setSubmitting(null);
+      setInFlightTransactions(prev => { const next = new Set(prev); next.delete(txKey); return next; });
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -253,7 +413,20 @@ export default function WorkflowPage() {
             }
             setSubmitting("invoice");
             try {
-              const nextInvoice = await service.issueInvoice({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoiceNo, amountMinor: parseAmountToMinor(invoiceAmount), issueDateUnix: toUnix(issueDate), dueDateUnix: toUnix(dueDate), currency, description });
+              const latestLedger = await service.getLedger(ledgerPda);
+              if (!latestLedger) {
+                throw new Error("Ledger account not found");
+              }
+
+              const journalEntryId = latestLedger.nextJournalEntryId;
+              const amountMinor = parseAmountToMinor(invoiceAmount);
+              const nextInvoice = await service.issueInvoice({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoiceNo, amountMinor, issueDateUnix: toUnix(issueDate), dueDateUnix: toUnix(dueDate), currency, description, onSubmitted: (signature) => showSubmittedSignature("Invoice", signature) });
+
+              await persistPostingLines(journalEntryId, [
+                { accountCode: latestLedger.arControlAccountCode, amount: amountMinor, isDebit: true },
+                { accountCode: latestLedger.revenueAccountCode, amount: amountMinor, isDebit: false },
+              ]);
+
               setInvoicePubkey(nextInvoice);
               await loadRecords();
               setSuccess(`Invoice issued: ${nextInvoice}`);
@@ -345,9 +518,9 @@ export default function WorkflowPage() {
 
                 {showSettlementCards ? (
                   <div className="space-y-2">
-                    <details id="record-receipt" className="rounded-md border border-slate-200 bg-slate-50 p-2"><summary className="cursor-pointer text-[11px] font-semibold">Record Receipt</summary><div className="mt-2 grid gap-2"><Input label="Seq" value={receiptSeq} onChange={(e) => setReceiptSeq(e.target.value)} /><Input label="No" value={receiptNo} onChange={(e) => setReceiptNo(e.target.value)} /><Input label="Amount" value={receiptAmount} onChange={(e) => setReceiptAmount(e.target.value)} /><Input label="Date" type="date" value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} /><Input label="Reference" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} /><Button type="button" onClick={async () => { if (!service || !ledgerPda || !selectedInvoice || !activeOnchainCustomerPubkey || !canWriteTransactions) return; const parsed = recordReceiptSchema.safeParse({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, receiptSeq, receiptNo, amount: receiptAmount, receiptDate, paymentReference }); if (!parsed.success) return; await service.recordReceipt({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, receiptSeq: Number(receiptSeq), receiptNo, amountMinor: parseAmountToMinor(receiptAmount), receiptDateUnix: toUnix(receiptDate), paymentReference }); await loadRecords(); setSuccess("Receipt recorded"); }}>Record</Button></div></details>
-                    <details id="issue-credit-note" className="rounded-md border border-slate-200 bg-slate-50 p-2"><summary className="cursor-pointer text-[11px] font-semibold">Issue Credit Note</summary><div className="mt-2 grid gap-2"><Input label="Seq" value={creditSeq} onChange={(e) => setCreditSeq(e.target.value)} /><Input label="No" value={creditNo} onChange={(e) => setCreditNo(e.target.value)} /><Input label="Amount" value={creditAmount} onChange={(e) => setCreditAmount(e.target.value)} /><Input label="Date" type="date" value={creditDate} onChange={(e) => setCreditDate(e.target.value)} /><Input label="Reason" value={creditReason} onChange={(e) => setCreditReason(e.target.value)} /><Button type="button" onClick={async () => { if (!service || !ledgerPda || !selectedInvoice || !activeOnchainCustomerPubkey || !canWriteTransactions) return; const parsed = issueCreditNoteSchema.safeParse({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, creditSeq, creditNo, amount: creditAmount, creditDate, reason: creditReason }); if (!parsed.success) return; await service.issueCreditNote({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, creditSeq: Number(creditSeq), creditNo, amountMinor: parseAmountToMinor(creditAmount), creditDateUnix: toUnix(creditDate), reason: creditReason }); await loadRecords(); setSuccess("Credit note issued"); }}>Issue</Button></div></details>
-                    <details id="write-off-invoice" className="rounded-md border border-slate-200 bg-slate-50 p-2"><summary className="cursor-pointer text-[11px] font-semibold">Write Off</summary><div className="mt-2 grid gap-2"><Input label="Amount" value={writeoffAmount} onChange={(e) => setWriteoffAmount(e.target.value)} /><Input label="Date" type="date" value={writeoffDate} onChange={(e) => setWriteoffDate(e.target.value)} /><Input label="Reason" value={writeoffReason} onChange={(e) => setWriteoffReason(e.target.value)} /><Button type="button" onClick={async () => { if (!service || !ledgerPda || !selectedInvoice || !activeOnchainCustomerPubkey || !canWriteTransactions) return; const parsed = writeOffSchema.safeParse({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, amount: writeoffAmount, writeoffDate, reason: writeoffReason }); if (!parsed.success) return; await service.writeOffInvoice({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, amountMinor: parseAmountToMinor(writeoffAmount), writeoffDateUnix: toUnix(writeoffDate), reason: writeoffReason }); await loadRecords(); setSuccess("Invoice written off"); }}>Write off</Button></div></details>
+                    <details id="record-receipt" className="rounded-md border border-slate-200 bg-slate-50 p-2"><summary className="cursor-pointer text-[11px] font-semibold">Record Receipt</summary><div className="mt-2 grid gap-2"><Input label="Seq" value={receiptSeq} onChange={(e) => setReceiptSeq(e.target.value)} /><Input label="No" value={receiptNo} onChange={(e) => setReceiptNo(e.target.value)} /><Input label="Amount" value={receiptAmount} onChange={(e) => setReceiptAmount(e.target.value)} /><Input label="Date" type="date" value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} /><Input label="Reference" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} /><Button type="button" disabled={submitting === "receipt"} onClick={handleRecordReceipt}>{submitting === "receipt" ? "Recording…" : "Record"}</Button></div></details>
+                    <details id="issue-credit-note" className="rounded-md border border-slate-200 bg-slate-50 p-2"><summary className="cursor-pointer text-[11px] font-semibold">Issue Credit Note</summary><div className="mt-2 grid gap-2"><Input label="Seq" value={creditSeq} onChange={(e) => setCreditSeq(e.target.value)} /><Input label="No" value={creditNo} onChange={(e) => setCreditNo(e.target.value)} /><Input label="Amount" value={creditAmount} onChange={(e) => setCreditAmount(e.target.value)} /><Input label="Date" type="date" value={creditDate} onChange={(e) => setCreditDate(e.target.value)} /><Input label="Reason" value={creditReason} onChange={(e) => setCreditReason(e.target.value)} /><Button type="button" disabled={submitting === "credit"} onClick={handleIssueCreditNote}>{submitting === "credit" ? "Issuing…" : "Issue"}</Button></div></details>
+                    <details id="write-off-invoice" className="rounded-md border border-slate-200 bg-slate-50 p-2"><summary className="cursor-pointer text-[11px] font-semibold">Write Off</summary><div className="mt-2 grid gap-2"><Input label="Amount" value={writeoffAmount} onChange={(e) => setWriteoffAmount(e.target.value)} /><Input label="Date" type="date" value={writeoffDate} onChange={(e) => setWriteoffDate(e.target.value)} /><Input label="Reason" value={writeoffReason} onChange={(e) => setWriteoffReason(e.target.value)} /><Button type="button" disabled={submitting === "writeoff"} onClick={handleWriteOffInvoice}>{submitting === "writeoff" ? "Writing off…" : "Write off"}</Button></div></details>
                     <div id="close-invoice" className="rounded-md border border-slate-200 bg-slate-50 p-2"><p className="text-[11px] font-semibold">Close Invoice</p><Button type="button" className="mt-2" disabled={selectedInvoice.openAmount !== 0 || !canWriteTransactions} onClick={async () => { if (!service || !ledgerPda || !selectedInvoice || !activeOnchainCustomerPubkey) return; const parsed = closeInvoiceSchema.safeParse({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey }); if (!parsed.success) return; await service.closeInvoice({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey }); await loadRecords(); setSuccess("Invoice closed"); }}>Close invoice</Button></div>
                   </div>
                 ) : null}

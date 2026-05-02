@@ -5,16 +5,25 @@ import { usePathname } from "next/navigation";
 import { type SVGProps } from "react";
 import { useTheme } from "@/context/theme-context";
 
-const links = [
-  { href: "/app", label: "Dashboard" },
-  { href: "/app/workflow", label: "Workflow" },
-  { href: "/app/ledgers", label: "Ledgers" },
-  { href: "/app/customers", label: "Customers" },
-  { href: "/app/invoices", label: "Invoices" },
-  { href: "/app/settlements", label: "Settlements" },
-  { href: "/app/timeline", label: "Activity" },
-  { href: "/app/configuration", label: "Configuration" },
-];
+const navSections = [
+  {
+    title: "Subledger Protocol",
+    links: [
+      { href: "/app", label: "Dashboard" },
+      { href: "/app/workflow", label: "Workflow" },
+      { href: "/app/ledgers", label: "Ledgers" },
+      { href: "/app/customers", label: "Customers" },
+      { href: "/app/invoices", label: "Invoices" },
+      { href: "/app/settlements", label: "Settlements" },
+      { href: "/app/timeline", label: "Activity" },
+      { href: "/app/configuration", label: "Configuration" },
+    ],
+  },
+  {
+    title: "Accounting Repo",
+    links: [{ href: "/app/accounting", label: "Base GL ( COA )" }],
+  },
+] as const;
 
 function SunIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -46,31 +55,49 @@ export function Sidebar() {
         <p className="mt-1 text-[10px] text-slate-600">Localnet workspace console</p>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
-        {links.map((item) => {
-          const active =
-            item.href === "/app"
-              ? pathname === "/app"
-              : pathname === item.href || pathname.startsWith(item.href + "/");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`group flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-medium transition ${
-                active
-                  ? "border-[var(--badge-border)] bg-[var(--badge-bg)] text-[var(--badge-fg)]"
-                  : "border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full transition ${
-                  active ? "bg-[var(--badge-border)]" : "bg-slate-500 group-hover:bg-slate-300"
-                }`}
-              />
-              {item.label}
-            </Link>
-          );
-        })}
+      <nav className="flex flex-1 flex-col gap-3 overflow-y-auto pr-1">
+        {navSections.map((section) => (
+          <div key={section.title} className="space-y-1.5">
+            <p className="px-1 text-[10px] uppercase tracking-[0.16em] text-slate-500">
+              {section.title}
+            </p>
+            {section.links.map((item) => {
+              const isBaseGlRoute =
+                pathname === "/app/accounting" ||
+                pathname.startsWith("/app/accounting/") ||
+                /^\/app\/ledgers\/[^/]+\/accounting(?:\/.*)?$/.test(pathname);
+
+              // Ledgers should NOT be highlighted on Base GL - Accounting Management pages
+              const isLedgerRoute = item.href === "/app/ledgers";
+              const active =
+                item.href === "/app"
+                  ? pathname === "/app"
+                  : item.href === "/app/accounting"
+                    ? isBaseGlRoute
+                    : isLedgerRoute && isBaseGlRoute
+                      ? false
+                      : pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`group flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-medium transition ${
+                    active
+                      ? "border-[var(--badge-border)] bg-[var(--badge-bg)] text-[var(--badge-fg)]"
+                      : "border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full transition ${
+                      active ? "bg-[var(--badge-border)]" : "bg-slate-500 group-hover:bg-slate-300"
+                    }`}
+                  />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className="mt-3 bg-slate-100 px-0 py-3">

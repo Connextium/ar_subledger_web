@@ -2,6 +2,7 @@ import type { ButtonHTMLAttributes } from "react";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "danger" | "ghost";
+  size?: "sm" | "md" | "lg";
 };
 
 const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
@@ -15,8 +16,15 @@ const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
     "border border-transparent bg-transparent text-[var(--btn-ghost-fg)] hover:border-[var(--btn-ghost-border-hover)] hover:bg-[var(--btn-ghost-bg-hover)]",
 };
 
+const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
+  sm: "px-2.5 py-1 text-[11px]",
+  md: "px-3 py-1.5 text-xs",
+  lg: "px-3.5 py-2 text-sm",
+};
+
 export function Button({
   variant = "primary",
+  size = "md",
   className = "",
   type = "button",
   disabled,
@@ -26,7 +34,7 @@ export function Button({
     <button
       type={type}
       disabled={disabled}
-      className={`inline-flex items-center justify-center rounded-md px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${variants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center rounded-md font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${sizes[size]} ${variants[variant]} ${className}`}
       {...props}
     />
   );

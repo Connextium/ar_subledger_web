@@ -63,8 +63,22 @@ export class WalletManagementService {
 
     const encrypted = encryptWalletPrivateKey(payload.privateKey);
     const chain = payload.chain ?? "solana";
+    const { data: activeMainWallet, error: activeMainError } = await supabase
+      .from("wallet_keypairs")
+      .select("id")
+      .eq("workspace_id", payload.workspaceId)
+      .eq("chain", chain)
+      .eq("status", "active")
+      .eq("is_main", true)
+      .maybeSingle();
 
-    if (payload.setAsMain) {
+    if (activeMainError) {
+      throw new Error(`Failed to check current main wallet: ${activeMainError.message}`);
+    }
+
+    const shouldSetAsMain = Boolean(payload.setAsMain) || !activeMainWallet;
+
+    if (shouldSetAsMain && activeMainWallet) {
       const { error: clearMainError } = await supabase
         .from("wallet_keypairs")
         .update({ is_main: false, updated_at: new Date().toISOString() })
@@ -96,7 +110,7 @@ export class WalletManagementService {
         usage: payload.usage,
         reference_type: payload.referenceType ?? null,
         reference_id: payload.referenceId ?? null,
-        is_main: Boolean(payload.setAsMain),
+        is_main: shouldSetAsMain,
         status: "active",
         created_by: payload.actorUserId,
       })

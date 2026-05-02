@@ -58,7 +58,12 @@ function readLocalState(): LocalControlPlane {
       customerCodeRegistry: parsed.customerCodeRegistry ?? [],
       customerLedgerLinks: parsed.customerLedgerLinks ?? [],
     };
-  } catch {
+  } catch (e) {
+    // Debug log for persistent corruption
+    console.error("Failed to parse ar:control-plane from localStorage", {
+      raw,
+      error: e,
+    });
     return {
       workspaces: [],
       members: [],
@@ -170,7 +175,7 @@ export class ControlPlaneService {
 
     const { data, error } = await supabase
       .from("ledgers")
-      .select("id,workspace_id,ledger_pda,ledger_code,authority_pubkey,status,created_at")
+      .select("id,workspace_id,ledger_pda,ledger_code,authority_pubkey,onchain_ledger_key,status,created_at")
       .eq("workspace_id", workspaceId);
 
     if (error || !data) return [];
@@ -181,6 +186,7 @@ export class ControlPlaneService {
       ledgerPda: row.ledger_pda,
       ledgerCode: row.ledger_code,
       authorityPubkey: row.authority_pubkey,
+      onchainLedgerKey: row.onchain_ledger_key,
       status: row.status ?? "active",
       createdAt: row.created_at,
     }));
@@ -197,7 +203,7 @@ export class ControlPlaneService {
 
     const { data, error } = await supabase
       .from("ledgers")
-      .select("id,workspace_id,ledger_pda,ledger_code,authority_pubkey,status,created_at")
+      .select("id,workspace_id,ledger_pda,ledger_code,authority_pubkey,onchain_ledger_key,status,created_at")
       .order("created_at", { ascending: true });
 
     if (error || !data) return [];
@@ -208,6 +214,7 @@ export class ControlPlaneService {
       ledgerPda: row.ledger_pda,
       ledgerCode: row.ledger_code,
       authorityPubkey: row.authority_pubkey,
+      onchainLedgerKey: row.onchain_ledger_key,
       status: row.status ?? "active",
       createdAt: row.created_at,
     }));
@@ -263,6 +270,7 @@ export class ControlPlaneService {
     ledgerPda: string;
     ledgerCode: string;
     authorityPubkey: string;
+    onchainLedgerKey?: string;
     status?: "active" | "inactive";
   }): Promise<void> {
     const normalizedLedgerCode = payload.ledgerCode.trim().toUpperCase();
@@ -289,6 +297,7 @@ export class ControlPlaneService {
         ledgerPda: payload.ledgerPda,
         ledgerCode: normalizedLedgerCode,
         authorityPubkey: payload.authorityPubkey,
+        onchainLedgerKey: payload.onchainLedgerKey ?? null,
         status: payload.status ?? "active",
         createdAt:
           existingIndex >= 0
@@ -329,6 +338,7 @@ export class ControlPlaneService {
         ledger_pda: payload.ledgerPda,
         ledger_code: normalizedLedgerCode,
         authority_pubkey: payload.authorityPubkey,
+        onchain_ledger_key: payload.onchainLedgerKey ?? null,
         status: payload.status ?? "active",
       },
       { onConflict: "workspace_id,ledger_pda" },

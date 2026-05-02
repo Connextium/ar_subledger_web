@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageTitle } from "@/components/ui/page-title";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/context/workspace-context";
+import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useRoleGate } from "@/hooks/use-role-gate";
 import { supabase } from "@/lib/supabase/client";
 import { env } from "@/lib/config/env";
@@ -34,7 +35,8 @@ async function getAuthToken(): Promise<string | null> {
 }
 
 export default function ConfigurationPage() {
-  const { selectedWorkspaceId } = useWorkspace();
+  const { selectedWorkspaceId, workspaces } = useWorkspace();
+  const { regenerateWallet } = useEmbeddedWallet();
   const { canWriteTransactions } = useRoleGate();
   const [wallets, setWallets] = useState<WorkspaceWallet[]>([]);
   const [loading, setLoading] = useState(false);
@@ -46,13 +48,18 @@ export default function ConfigurationPage() {
   const [setAsMain, setSetAsMain] = useState(false);
   const [exportedPrivateKey, setExportedPrivateKey] = useState<string | null>(null);
 
+  const activeWorkspaceId = selectedWorkspaceId ?? workspaces[0]?.id ?? null;
+  const hasWorkspace = Boolean(activeWorkspaceId);
+
   const mainWallet = useMemo(
     () => wallets.find((wallet) => wallet.isMain && wallet.status === "active") ?? null,
     [wallets],
   );
 
+  const canCreateWallet = hasWorkspace && (canWriteTransactions || wallets.length === 0);
+
   const loadWallets = useCallback(async () => {
-    if (!selectedWorkspaceId || !env.supabaseUrl || !env.supabaseAnonKey) {
+    if (!activeWorkspaceId || !env.supabaseUrl || !env.supabaseAnonKey) {
       setWallets([]);
       return;
     }
@@ -67,7 +74,7 @@ export default function ConfigurationPage() {
     setError(null);
     try {
       const response = await fetch(
-        `/api/wallets?workspaceId=${encodeURIComponent(selectedWorkspaceId)}`,
+        `/api/wallets?workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
         {
           headers: {
             authorization: `Bearer ${token}`,
@@ -84,7 +91,7 @@ export default function ConfigurationPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedWorkspaceId]);
+  }, [activeWorkspaceId]);
 
   useEffect(() => {
     void loadWallets();
@@ -92,7 +99,7 @@ export default function ConfigurationPage() {
 
   const requestBalanceRefresh = useCallback(
     async (options?: { silent?: boolean }) => {
-      if (!selectedWorkspaceId) return false;
+      if (!activeWorkspaceId) return false;
       const token = await getAuthToken();
       if (!token) {
         if (!options?.silent) {
@@ -111,7 +118,7 @@ export default function ConfigurationPage() {
           "content-type": "application/json",
           authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ workspaceId: selectedWorkspaceId }),
+        body: JSON.stringify({ workspaceId: activeWorkspaceId }),
       });
 
       const data = (await response.json()) as { snapshots?: unknown[]; error?: string };
@@ -129,19 +136,30 @@ export default function ConfigurationPage() {
       await loadWallets();
       return true;
     },
-    [loadWallets, selectedWorkspaceId],
+    [activeWorkspaceId, loadWallets],
   );
 
   useEffect(() => {
-    if (!selectedWorkspaceId || !canWriteTransactions) return;
-    if (autoRefreshedWorkspaceRef.current === selectedWorkspaceId) return;
+    if (!activeWorkspaceId || !canWriteTransactions) return;
+    if (autoRefreshedWorkspaceRef.current === activeWorkspaceId) return;
 
-    autoRefreshedWorkspaceRef.current = selectedWorkspaceId;
+    autoRefreshedWorkspaceRef.current = activeWorkspaceId;
     void requestBalanceRefresh({ silent: true });
-  }, [canWriteTransactions, requestBalanceRefresh, selectedWorkspaceId]);
+  }, [activeWorkspaceId, canWriteTransactions, requestBalanceRefresh]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setSetAsMain(false);
+      return;
+    }
+
+    if (wallets.length === 0) {
+      setSetAsMain(true);
+    }
+  }, [activeWorkspaceId, wallets.length]);
 
   const createWallet = async () => {
-    if (!selectedWorkspaceId) return;
+    if (!activeWorkspaceId) return;
     const token = await getAuthToken();
     if (!token) {
       setError("Authentication token is missing.");
@@ -159,7 +177,7 @@ export default function ConfigurationPage() {
         authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        workspaceId: selectedWorkspaceId,
+        workspaceId: activeWorkspaceId,
         usage: createUsage,
         source: "rotate",
         setAsMain,
@@ -175,10 +193,11 @@ export default function ConfigurationPage() {
     setMessage(`Created wallet ${clampText(data.wallet?.publicKey ?? "", 20)}.`);
     setSetAsMain(false);
     await loadWallets();
+    regenerateWallet();
   };
 
   const setMainWallet = async (walletId: string) => {
-    if (!selectedWorkspaceId) return;
+    if (!activeWorkspaceId) return;
     const token = await getAuthToken();
     if (!token) {
       setError("Authentication token is missing.");
@@ -192,7 +211,7 @@ export default function ConfigurationPage() {
         "content-type": "application/json",
         authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ workspaceId: selectedWorkspaceId, walletId }),
+      body: JSON.stringify({ workspaceId: activeWorkspaceId, walletId }),
     });
 
     const data = (await response.json()) as { error?: string };
@@ -203,6 +222,7 @@ export default function ConfigurationPage() {
 
     setMessage("Main wallet updated.");
     await loadWallets();
+    regenerateWallet();
   };
 
   const refreshBalances = async () => {
@@ -210,7 +230,7 @@ export default function ConfigurationPage() {
   };
 
   const exportWallet = async (walletId: string) => {
-    if (!selectedWorkspaceId) return;
+    if (!activeWorkspaceId) return;
     const token = await getAuthToken();
     if (!token) {
       setError("Authentication token is missing.");
@@ -224,7 +244,7 @@ export default function ConfigurationPage() {
         "content-type": "application/json",
         authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ workspaceId: selectedWorkspaceId, walletId }),
+      body: JSON.stringify({ workspaceId: activeWorkspaceId, walletId }),
     });
     const data = (await response.json()) as { privateKey?: string; error?: string };
     if (!response.ok) {
@@ -240,9 +260,9 @@ export default function ConfigurationPage() {
     <div className="space-y-4">
       <PageTitle
         title="Configuration"
-        subtitle="Workspace wallet management and operational signer settings."
+        subtitle="Step 1: create/select workspace. Step 2: create wallet."
         actions={
-          <Button variant="secondary" onClick={refreshBalances} disabled={!selectedWorkspaceId || !canWriteTransactions}>
+          <Button variant="secondary" onClick={refreshBalances} disabled={!activeWorkspaceId || !canWriteTransactions}>
             Refresh Balances
           </Button>
         }
@@ -259,9 +279,9 @@ export default function ConfigurationPage() {
         </p>
       ) : null}
 
-      {!selectedWorkspaceId ? (
+      {!activeWorkspaceId ? (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
-          Select a workspace from topbar to manage wallets.
+          Create a workspace first (topbar), then create a wallet.
         </p>
       ) : null}
 
@@ -327,6 +347,11 @@ export default function ConfigurationPage() {
 
       <section id="create-wallet" className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
         <h2 className="text-xs font-semibold text-slate-900">Create New Wallet</h2>
+        {!hasWorkspace ? (
+          <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-700">
+            Workspace is required before wallet creation.
+          </p>
+        ) : null}
         <div className="mt-2 grid gap-2 md:grid-cols-1">
           <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-700">
             <span>Usage</span>
@@ -354,7 +379,7 @@ export default function ConfigurationPage() {
         </label>
 
         <div className="mt-3">
-          <Button disabled={!selectedWorkspaceId || !canWriteTransactions} onClick={createWallet}>
+          <Button disabled={!canCreateWallet} onClick={createWallet}>
             Create Wallet
           </Button>
         </div>

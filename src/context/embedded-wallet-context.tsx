@@ -8,9 +8,6 @@ import { env } from "@/lib/config/env";
 import { supabase } from "@/lib/supabase/client";
 import type { WorkspaceWallet } from "@/lib/types/wallet";
 
-const STORAGE_PREFIX = "ar:embedded-wallet";
-const LEGACY_IMPORT_PREFIX = "ar:wallet-legacy-imported";
-
 type EmbeddedWalletContextValue = {
   wallet: EmbeddedWallet | null;
   loading: boolean;
@@ -24,39 +21,29 @@ export function EmbeddedWalletProvider({ children }: { children: React.ReactNode
   const { selectedWorkspaceId } = useWorkspace();
   const [wallet, setWallet] = useState<EmbeddedWallet | null>(null);
   const [loading, setLoading] = useState(true);
-  const [fallbackWallet, setFallbackWallet] = useState<EmbeddedWallet | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     if (!user) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setWallet(null);
       setLoading(false);
       return;
     }
 
-    const key = `${STORAGE_PREFIX}:${user.id}`;
-    const existing = window.localStorage.getItem(key);
-
-    if (existing) {
-      const restored = EmbeddedWallet.fromSecret(existing);
-      setFallbackWallet(restored);
-      setWallet(restored);
-      setLoading(false);
-      return;
-    }
-
-    const nextWallet = EmbeddedWallet.create();
-    window.localStorage.setItem(key, nextWallet.exportSecretKey());
-    setFallbackWallet(nextWallet);
-    setWallet(nextWallet);
-    setLoading(false);
+    // Wallet must be explicitly created in Configuration; do not auto-generate on login.
+    setWallet(null);
   }, [user]);
 
   useEffect(() => {
     if (!env.supabaseUrl || !env.supabaseAnonKey) return;
-    if (!user || !selectedWorkspaceId) return;
+    if (!user || !selectedWorkspaceId) {
+      setWallet(null);
+      setLoading(false);
+      return;
+    }
 
     let cancelled = false;
+    setLoading(true);
 
     void (async () => {
       try {
@@ -64,29 +51,9 @@ export function EmbeddedWalletProvider({ children }: { children: React.ReactNode
           data: { session },
         } = await supabase.auth.getSession();
         const accessToken = session?.access_token;
-        if (!accessToken || cancelled) return;
-
-        if (fallbackWallet) {
-          const importKey = `${LEGACY_IMPORT_PREFIX}:${user.id}:${selectedWorkspaceId}`;
-          const imported = window.localStorage.getItem(importKey);
-          if (!imported) {
-            const importResponse = await fetch("/api/wallets/import-legacy", {
-              method: "POST",
-              headers: {
-                "content-type": "application/json",
-                authorization: `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({
-                workspaceId: selectedWorkspaceId,
-                privateKey: fallbackWallet.exportSecretKey(),
-                setAsMain: true,
-              }),
-            });
-
-            if (importResponse.ok) {
-              window.localStorage.setItem(importKey, "1");
-            }
-          }
+        if (!accessToken || cancelled) {
+          if (!cancelled) setWallet(null);
+          return;
         }
 
         const listResponse = await fetch(
@@ -99,7 +66,7 @@ export function EmbeddedWalletProvider({ children }: { children: React.ReactNode
         );
 
         if (!listResponse.ok) {
-          if (!cancelled && fallbackWallet) setWallet(fallbackWallet);
+          if (!cancelled) setWallet(null);
           return;
         }
 
@@ -108,7 +75,7 @@ export function EmbeddedWalletProvider({ children }: { children: React.ReactNode
           listData.wallets?.find((row) => row.isMain && row.status === "active") ?? null;
 
         if (!candidate) {
-          if (!cancelled && fallbackWallet) setWallet(fallbackWallet);
+          if (!cancelled) setWallet(null);
           return;
         }
 
@@ -122,13 +89,13 @@ export function EmbeddedWalletProvider({ children }: { children: React.ReactNode
         });
 
         if (!exportResponse.ok) {
-          if (!cancelled && fallbackWallet) setWallet(fallbackWallet);
+          if (!cancelled) setWallet(null);
           return;
         }
 
         const exportData = (await exportResponse.json()) as { privateKey?: string };
         if (!exportData.privateKey) {
-          if (!cancelled && fallbackWallet) setWallet(fallbackWallet);
+          if (!cancelled) setWallet(null);
           return;
         }
 
@@ -137,31 +104,26 @@ export function EmbeddedWalletProvider({ children }: { children: React.ReactNode
           setWallet(workspaceWallet);
         }
       } catch {
-        if (!cancelled && fallbackWallet) {
-          setWallet(fallbackWallet);
-        }
+        if (!cancelled) setWallet(null);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [fallbackWallet, selectedWorkspaceId, user]);
+  }, [reloadToken, selectedWorkspaceId, user]);
 
   const value = useMemo<EmbeddedWalletContextValue>(
     () => ({
       wallet,
       loading,
       regenerateWallet() {
-        if (!user) return;
-        const key = `${STORAGE_PREFIX}:${user.id}`;
-        const nextWallet = EmbeddedWallet.create();
-        window.localStorage.setItem(key, nextWallet.exportSecretKey());
-        setFallbackWallet(nextWallet);
-        setWallet(nextWallet);
+        setReloadToken((prev) => prev + 1);
       },
     }),
-    [loading, user, wallet],
+    [loading, wallet],
   );
 
   return <EmbeddedWalletContext.Provider value={value}>{children}</EmbeddedWalletContext.Provider>;

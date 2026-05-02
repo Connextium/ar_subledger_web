@@ -8,6 +8,10 @@ import type {
   WriteOffRecord,
 } from "@/lib/types/domain";
 
+export type TransactionSubmissionHooks = {
+  onSubmitted?: (signature: string) => void;
+};
+
 export type InitializeLedgerInput = {
   ledgerCode: string;
   accountingLedgerPubkey: string;
@@ -31,7 +35,7 @@ export type UpdateCustomerInput = {
   creditLimitMinor: number;
 };
 
-export type IssueInvoiceInput = {
+export type IssueInvoiceInput = TransactionSubmissionHooks & {
   ledgerPubkey: string;
   customerPubkey: string;
   invoiceNo: string;
@@ -42,7 +46,7 @@ export type IssueInvoiceInput = {
   description: string;
 };
 
-export type RecordReceiptInput = {
+export type RecordReceiptInput = TransactionSubmissionHooks & {
   ledgerPubkey: string;
   customerPubkey: string;
   invoicePubkey: string;
@@ -53,7 +57,7 @@ export type RecordReceiptInput = {
   paymentReference: string;
 };
 
-export type IssueCreditNoteInput = {
+export type IssueCreditNoteInput = TransactionSubmissionHooks & {
   ledgerPubkey: string;
   customerPubkey: string;
   invoicePubkey: string;
@@ -64,7 +68,7 @@ export type IssueCreditNoteInput = {
   reason: string;
 };
 
-export type WriteOffInvoiceInput = {
+export type WriteOffInvoiceInput = TransactionSubmissionHooks & {
   ledgerPubkey: string;
   customerPubkey: string;
   invoicePubkey: string;
@@ -73,7 +77,7 @@ export type WriteOffInvoiceInput = {
   reason: string;
 };
 
-export type CloseInvoiceInput = {
+export type CloseInvoiceInput = TransactionSubmissionHooks & {
   ledgerPubkey: string;
   customerPubkey: string;
   invoicePubkey: string;

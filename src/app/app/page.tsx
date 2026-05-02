@@ -44,27 +44,30 @@ export default function DashboardPage() {
       setError(null);
 
       try {
-        const [allLedgers, allCustomers, allInvoices] = await Promise.all([
+        const [allLedgers] = await Promise.all([
           service.listLedgers(),
-          service.listCustomers(),
-          service.listInvoices(),
         ]);
 
         const ledgers =
           workspaceLedgerSet.size > 0
             ? allLedgers.filter((ledger) => workspaceLedgerSet.has(ledger.pubkey))
             : allLedgers;
-        const ledgerKeySet = new Set(ledgers.map((ledger) => ledger.pubkey));
 
-        const customers =
-          workspaceLedgerSet.size > 0
-            ? allCustomers.filter((customer) => ledgerKeySet.has(customer.ledger))
-            : allCustomers;
+        // Optimize: fetch customers and invoices for each active ledger separately
+        // This uses memcmp filtering in getProgramAccounts instead of scanning all accounts
+        const ledgerKeys = ledgers.map((ledger) => ledger.pubkey);
+        const customerPromises = ledgerKeys.map((ledgerKey) =>
+          service.listCustomers(ledgerKey),
+        );
+        const invoicePromises = ledgerKeys.map((ledgerKey) =>
+          service.listInvoices(ledgerKey),
+        );
 
-        const invoices =
-          workspaceLedgerSet.size > 0
-            ? allInvoices.filter((invoice) => ledgerKeySet.has(invoice.ledger))
-            : allInvoices;
+        const customerResults = await Promise.all(customerPromises);
+        const invoiceResults = await Promise.all(invoicePromises);
+
+        const customers = customerResults.flat();
+        const invoices = invoiceResults.flat();
 
         const counts = invoices.reduce<Record<number, number>>((acc, invoice) => {
           acc[invoice.status] = (acc[invoice.status] ?? 0) + 1;

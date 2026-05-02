@@ -6,7 +6,10 @@ import { env } from "@/lib/config/env";
 import type { EmbeddedWallet } from "@/lib/solana/embedded-wallet";
 import idl from "@/lib/solana/ar_subledger.idl.json";
 
-export const connection = new Connection(env.solanaRpcUrl, "confirmed");
+export const connection = new Connection(env.solanaRpcUrl, {
+  commitment: "confirmed",
+  confirmTransactionInitialTimeout: 120_000, // 120 s — avoids the default 30 s timeout on busy validators
+});
 
 export function getProgramId(): PublicKey {
   return new PublicKey(env.programId);
@@ -15,6 +18,7 @@ export function getProgramId(): PublicKey {
 export function createAnchorProvider(wallet: EmbeddedWallet): AnchorProvider {
   return new AnchorProvider(connection, wallet as AnchorProvider["wallet"], {
     commitment: "confirmed",
+    preflightCommitment: "confirmed",
   });
 }
 
