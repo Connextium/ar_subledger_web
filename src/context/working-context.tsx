@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useReducer } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useWorkspace } from "@/context/workspace-context";
 import { controlPlaneService } from "@/services/control-plane-service";
@@ -15,6 +15,7 @@ type WorkingContextValue = {
   invoicePubkey: string | null;
   ledgerOptions: WorkspaceLedgerLink[];
   customerOptions: WorkspaceCustomer[];
+  refreshCustomerOptions: () => Promise<void>;
   setLedgerPda: (ledgerPda: string | null) => void;
   setCustomerId: (customerId: string | null) => void;
   setInvoicePubkey: (invoicePubkey: string | null) => void;
@@ -137,6 +138,31 @@ export function WorkingContextProvider({ children }: { children: React.ReactNode
   const [state, dispatch] = useReducer(reducer, initialState);
   const { workspaceId, ledgerPda, customerId, invoicePubkey, customerOptions } = state;
 
+  const refreshCustomerOptions = useCallback(async () => {
+    if (!workspaceId) {
+      dispatch({ type: "set_customer_options", payload: { customerOptions: [] } });
+      return;
+    }
+
+    const [rows, links] = await Promise.all([
+      controlPlaneService.listWorkspaceCustomers(workspaceId),
+      controlPlaneService.listWorkspaceCustomerLedgerLinks({ workspaceId }),
+    ]);
+
+    const scopedRows = ledgerPda
+      ? rows.filter((customer) =>
+          links.some(
+            (link) =>
+              link.workspaceCustomerId === customer.id &&
+              link.ledgerPda === ledgerPda &&
+              link.status === "active",
+          ),
+        )
+      : rows;
+
+    dispatch({ type: "set_customer_options", payload: { customerOptions: scopedRows } });
+  }, [ledgerPda, workspaceId]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const raw = window.sessionStorage.getItem(WORKING_CONTEXT_STORAGE_KEY);
@@ -196,13 +222,15 @@ export function WorkingContextProvider({ children }: { children: React.ReactNode
   }, [selectedWorkspaceId]);
 
   useEffect(() => {
-    if (!workspaceId) {
-      dispatch({ type: "set_customer_options", payload: { customerOptions: [] } });
-      return;
-    }
-
     let cancelled = false;
     void (async () => {
+      if (!workspaceId) {
+        if (!cancelled) {
+          dispatch({ type: "set_customer_options", payload: { customerOptions: [] } });
+        }
+        return;
+      }
+
       const [rows, links] = await Promise.all([
         controlPlaneService.listWorkspaceCustomers(workspaceId),
         controlPlaneService.listWorkspaceCustomerLedgerLinks({ workspaceId }),
@@ -285,6 +313,7 @@ export function WorkingContextProvider({ children }: { children: React.ReactNode
       invoicePubkey,
       ledgerOptions,
       customerOptions,
+      refreshCustomerOptions,
       setLedgerPda(nextLedgerPda) {
         dispatch({ type: "set_ledger", payload: { ledgerPda: normalize(nextLedgerPda) } });
       },
@@ -298,7 +327,7 @@ export function WorkingContextProvider({ children }: { children: React.ReactNode
         dispatch({ type: "clear_context" });
       },
     }),
-    [workspaceId, ledgerPda, customerId, invoicePubkey, ledgerOptions, customerOptions],
+    [workspaceId, ledgerPda, customerId, invoicePubkey, ledgerOptions, customerOptions, refreshCustomerOptions],
   );
 
   return <WorkingContext.Provider value={value}>{children}</WorkingContext.Provider>;

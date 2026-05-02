@@ -34,7 +34,7 @@ export default function CustomersPage() {
   const arService = useArSubledger();
   const { canWriteTransactions } = useRoleGate();
   const { selectedWorkspaceId, ledgerLinks } = useWorkspace();
-  const { customerId, setCustomerId, setLedgerPda, workspaceId } = useWorkingContext();
+  const { customerId, refreshCustomerOptions, setCustomerId, setLedgerPda, workspaceId } = useWorkingContext();
 
   const workspaceFromQuery = searchParams.get("workspace");
   const activeWorkspaceId = workspaceId ?? selectedWorkspaceId ?? workspaceFromQuery;
@@ -261,6 +261,7 @@ export default function CustomersPage() {
 
       setFormOnchainCustomerPubkey(onchainPubkey);
       await load();
+  await refreshCustomerOptions();
       setCustomerId(selectedCustomer.id);
       setMessage(`On-chain customer confirmed and linked: ${onchainPubkey}`);
     } catch (error) {
@@ -584,8 +585,9 @@ export default function CustomersPage() {
                 }
 
                 await load();
+        await refreshCustomerOptions();
                 setIsCreateModePinned(false);
-                    setCustomerId(targetCustomer.id);
+        setCustomerId(targetCustomer.id);
                 setMessage(formMode === "create" ? "Customer created." : "Customer updated.");
               } catch (error) {
                 setErrors({ form: error instanceof Error ? error.message : "Save failed." });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { PageTitle } from "@/components/ui/page-title";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -60,10 +60,59 @@ export default function AccountingHubPage() {
   const [workspaceAccountingGls, setWorkspaceAccountingGls] = useState<AccountingLedger[]>([]);
   const [ledgerDiscoveryDebug, setLedgerDiscoveryDebug] = useState<AccountingLedgerDiscoveryDebug | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const selectedLedgerIdRef = useRef<string>("");
 
   const activeWorkspaceId = selectedWorkspaceId ?? workspaces[0]?.id ?? null;
 
-  // Load ledgers and accounting data
+  useEffect(() => {
+    selectedLedgerIdRef.current = selectedLedgerId;
+  }, [selectedLedgerId]);
+
+  const loadSelectedLedgerDetails = useCallback(async (nextLedgers: LedgerWithAccounting[], nextSelectedLedgerId: string) => {
+    const targetLedger = nextLedgers.find((ledger) => ledger.id === nextSelectedLedgerId);
+    if (!targetLedger?.onchain_ledger_key) {
+      setLedgers(nextLedgers);
+      return;
+    }
+
+    try {
+      const ledgerKey = new PublicKey(targetLedger.onchain_ledger_key);
+      const [glAccounts, journalEntries] = await Promise.all([
+        accountingEngineService.listGlAccounts(ledgerKey),
+        accountingEngineService.listJournalEntries(ledgerKey),
+      ]);
+
+      let totalAssets = BigInt(0);
+      let totalLiabilities = BigInt(0);
+
+      glAccounts.forEach((account) => {
+        if (account.account.category === "Asset") {
+          totalAssets += account.account.balance;
+        } else if (account.account.category === "Liability") {
+          totalLiabilities += account.account.balance;
+        }
+      });
+
+      setLedgers(
+        nextLedgers.map((ledger) =>
+          ledger.id === nextSelectedLedgerId
+            ? {
+                ...ledger,
+                glAccounts,
+                recentEntries: journalEntries.slice(0, 5),
+                totalAssets,
+                totalLiabilities,
+              }
+            : ledger,
+        ),
+      );
+    } catch (err) {
+      console.error(`Error loading data for ledger ${targetLedger.code}:`, err);
+      setLedgers(nextLedgers);
+    }
+  }, []);
+
+  // Load ledgers and lightweight accounting data
   const loadData = useCallback(async () => {
     if (!activeWorkspaceId) {
       setError("No workspace selected");
@@ -79,7 +128,7 @@ export default function AccountingHubPage() {
         ? await accountingEngineService.listLedgersByAuthority(wallet.publicKey)
         : [];
       setWorkspaceAccountingGls(baseAccountingGls);
-      if (wallet) {
+      if (wallet && baseAccountingGls.length === 0) {
         const debug = await accountingEngineService.getLedgerDiscoveryDebug(wallet.publicKey);
         setLedgerDiscoveryDebug(debug);
       } else {
@@ -140,11 +189,7 @@ export default function AccountingHubPage() {
         );
       };
 
-      // Load accounting data for each ledger
-      const ledgersWithData: LedgerWithAccounting[] = [];
-
-      for (const dbLedger of resolvedLedgerRows) {
-        const baseRow: LedgerWithAccounting = {
+      const ledgersWithData: LedgerWithAccounting[] = resolvedLedgerRows.map((dbLedger) => ({
           id: dbLedger.id,
           code: dbLedger.ledger_code,
           ledgerPda: dbLedger.ledger_pda,
@@ -153,50 +198,11 @@ export default function AccountingHubPage() {
           recentEntries: [],
           totalAssets: BigInt(0),
           totalLiabilities: BigInt(0),
-        };
+        }));
 
-        if (!dbLedger.onchain_ledger_key) {
-          ledgersWithData.push(baseRow);
-          continue;
-        }
-
-        try {
-          const ledgerKey = new PublicKey(dbLedger.onchain_ledger_key);
-
-          const [glAccounts, journalEntries] = await Promise.all([
-            accountingEngineService.listGlAccounts(ledgerKey),
-            accountingEngineService.listJournalEntries(ledgerKey),
-          ]);
-
-          // Calculate totals
-          let totalAssets = BigInt(0);
-          let totalLiabilities = BigInt(0);
-
-          glAccounts.forEach((acc) => {
-            if (acc.account.category === "Asset") {
-              totalAssets += acc.account.balance;
-            } else if (acc.account.category === "Liability") {
-              totalLiabilities += acc.account.balance;
-            }
-          });
-
-          ledgersWithData.push({
-            ...baseRow,
-            glAccounts,
-            recentEntries: journalEntries.slice(0, 5),
-            totalAssets,
-            totalLiabilities,
-          });
-        } catch (err) {
-          console.error(`Error loading data for ledger ${dbLedger.ledger_code}:`, err);
-          ledgersWithData.push(baseRow);
-        }
-      }
-
-      setLedgers(ledgersWithData);
-      if (ledgersWithData.length > 0 && !selectedLedgerId) {
-        setSelectedLedgerId(ledgersWithData[0].id);
-      }
+      const nextSelectedLedgerId = selectedLedgerIdRef.current || ledgersWithData[0]?.id || "";
+      setSelectedLedgerId((current) => current || nextSelectedLedgerId);
+      await loadSelectedLedgerDetails(ledgersWithData, nextSelectedLedgerId);
       await mergeAccountingLedgers(resolvedLedgerRows as Array<{ onchain_ledger_key: string | null }>);
     } catch (err) {
       console.error("Error loading accounting data:", err);
@@ -204,7 +210,7 @@ export default function AccountingHubPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeWorkspaceId, arSubledgerService, selectedLedgerId, wallet]);
+  }, [activeWorkspaceId, arSubledgerService, loadSelectedLedgerDetails, wallet]);
 
   useEffect(() => {
     void loadData();
@@ -374,7 +380,11 @@ export default function AccountingHubPage() {
             <label className="block text-sm font-medium text-gray-700 mb-2">Select Ledger</label>
             <select
               value={selectedLedgerId}
-              onChange={(e) => setSelectedLedgerId(e.target.value)}
+              onChange={(e) => {
+                const nextLedgerId = e.target.value;
+                setSelectedLedgerId(nextLedgerId);
+                void loadSelectedLedgerDetails(ledgers, nextLedgerId);
+              }}
               className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {ledgers.map((ledger) => (
