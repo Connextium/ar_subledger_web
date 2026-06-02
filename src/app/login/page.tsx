@@ -10,13 +10,13 @@ export default function LoginPage() {
           <div className="relative z-10 flex min-h-[560px] w-full max-w-xl flex-col rounded-2xl border border-slate-200 bg-slate-50/90 p-8 shadow-sm backdrop-blur">
             <div className="mt-20">
               <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">AR Suite</p>
-              <h1 className="mt-2 text-2xl font-semibold text-slate-900">C.L.O.B</h1>
-              <p className="mt-1 text-sm text-slate-700">Contract, Ledger, Object, Book</p>
+              <h1 className="mt-2 text-2xl font-semibold text-slate-900">C.L.ō.B</h1>
+              <p className="mt-1 text-sm text-slate-700">Contract, Ledger, Ōbject, Book</p>
 
               <div className="mt-4 grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
                 <p><span className="font-semibold">C</span>ontract: Smart-contract rules enforce integrity.</p>
                 <p><span className="font-semibold">L</span>edger: Workspace-scoped ledger contexts.</p>
-                <p><span className="font-semibold">O</span>bject: Customer/invoice records are traceable objects.</p>
+                <p><span className="font-semibold">Ō</span>bject: Customer/invoice records are traceable objects.</p>
                 <p><span className="font-semibold">B</span>ook: Book-ready lifecycle from issue to settlement.</p>
               </div>
 
