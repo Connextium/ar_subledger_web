@@ -127,6 +127,7 @@ export class WalletManagementService {
   async importLegacyWallet(payload: {
     workspaceId: string;
     actorUserId: string;
+    publicKey?: string | null;
     privateKey: string;
     setAsMain?: boolean;
   }): Promise<WorkspaceWallet> {
@@ -140,6 +141,20 @@ export class WalletManagementService {
     }
 
     const publicKey = keypair.publicKey.toBase58();
+    const expectedPublicKey = payload.publicKey?.trim();
+    if (expectedPublicKey) {
+      try {
+        const normalizedExpectedPublicKey = new PublicKey(expectedPublicKey).toBase58();
+        if (normalizedExpectedPublicKey !== publicKey) {
+          throw new Error("Imported public key does not match the private key.");
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("does not match")) {
+          throw error;
+        }
+        throw new Error("Invalid public key format.");
+      }
+    }
 
     const { data: existingData, error: existingError } = await supabase
       .from("wallet_keypairs")

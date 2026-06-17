@@ -47,6 +47,10 @@ export default function ConfigurationPage() {
   const [createUsage, setCreateUsage] = useState<WalletUsage>("transaction_signer");
   const [setAsMain, setSetAsMain] = useState(false);
   const [exportedPrivateKey, setExportedPrivateKey] = useState<string | null>(null);
+  const [importPublicKey, setImportPublicKey] = useState("");
+  const [importPrivateKey, setImportPrivateKey] = useState("");
+  const [importSetAsMain, setImportSetAsMain] = useState(true);
+  const [importingWallet, setImportingWallet] = useState(false);
 
   const activeWorkspaceId = selectedWorkspaceId ?? workspaces[0]?.id ?? null;
   const hasWorkspace = Boolean(activeWorkspaceId);
@@ -155,6 +159,7 @@ export default function ConfigurationPage() {
 
     if (wallets.length === 0) {
       setSetAsMain(true);
+      setImportSetAsMain(true);
     }
   }, [activeWorkspaceId, wallets.length]);
 
@@ -194,6 +199,60 @@ export default function ConfigurationPage() {
     setSetAsMain(false);
     await loadWallets();
     regenerateWallet();
+  };
+
+  const importWallet = async () => {
+    if (!activeWorkspaceId || importingWallet) return;
+
+    const publicKey = importPublicKey.trim();
+    const privateKey = importPrivateKey.trim();
+    if (!publicKey || !privateKey) {
+      setError("Public key and private key are required.");
+      return;
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      setError("Authentication token is missing.");
+      return;
+    }
+
+    setImportingWallet(true);
+    setError(null);
+    setMessage(null);
+    setExportedPrivateKey(null);
+
+    try {
+      const response = await fetch("/api/wallets/import-legacy", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          workspaceId: activeWorkspaceId,
+          publicKey,
+          privateKey,
+          setAsMain: importSetAsMain,
+        }),
+      });
+
+      const data = (await response.json()) as { wallet?: WorkspaceWallet; error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to import wallet.");
+      }
+
+      setMessage(`Imported wallet ${clampText(data.wallet?.publicKey ?? publicKey, 20)}.`);
+      setImportPublicKey("");
+      setImportPrivateKey("");
+      setImportSetAsMain(false);
+      await loadWallets();
+      regenerateWallet();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Failed to import wallet.");
+    } finally {
+      setImportingWallet(false);
+    }
   };
 
   const setMainWallet = async (walletId: string) => {
@@ -343,6 +402,57 @@ export default function ConfigurationPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section id="import-wallet" className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <h2 className="text-xs font-semibold text-slate-900">Import Wallet</h2>
+        {!hasWorkspace ? (
+          <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-700">
+            Workspace is required before wallet import.
+          </p>
+        ) : null}
+        <div className="mt-2 grid gap-2">
+          <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-700">
+            <span>Public Key</span>
+            <input
+              className="rounded-md border border-slate-300 bg-slate-50 px-2.5 py-2 font-mono text-xs text-slate-900 outline-none placeholder:text-slate-500 focus:border-cyan-300/60"
+              value={importPublicKey}
+              onChange={(event) => setImportPublicKey(event.target.value)}
+              placeholder="Wallet public key"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-700">
+            <span>Private Key</span>
+            <textarea
+              className="min-h-24 resize-y rounded-md border border-slate-300 bg-slate-50 px-2.5 py-2 font-mono text-xs text-slate-900 outline-none placeholder:text-slate-500 focus:border-cyan-300/60"
+              value={importPrivateKey}
+              onChange={(event) => setImportPrivateKey(event.target.value)}
+              placeholder="Base58 encoded private key"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+        </div>
+
+        <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-700">
+          <input
+            type="checkbox"
+            checked={importSetAsMain}
+            onChange={(event) => setImportSetAsMain(event.target.checked)}
+          />
+          Set as main wallet after import
+        </label>
+
+        <div className="mt-3">
+          <Button
+            disabled={!hasWorkspace || !canWriteTransactions || importingWallet}
+            onClick={importWallet}
+          >
+            {importingWallet ? "Importing..." : "Import Wallet"}
+          </Button>
+        </div>
       </section>
 
       <section id="create-wallet" className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">

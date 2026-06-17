@@ -4,6 +4,7 @@ import { walletManagementService } from "@/services/wallet-management-service";
 
 type ImportLegacyWalletRequest = {
   workspaceId?: string;
+  publicKey?: string;
   privateKey?: string;
   setAsMain?: boolean;
 };
@@ -12,6 +13,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as ImportLegacyWalletRequest;
     const workspaceId = body.workspaceId?.trim();
+    const publicKey = body.publicKey?.trim();
     const privateKey = body.privateKey?.trim();
 
     if (!workspaceId || !privateKey) {
@@ -26,6 +28,7 @@ export async function POST(request: Request) {
     const wallet = await walletManagementService.importLegacyWallet({
       workspaceId,
       actorUserId: auth.userId,
+      publicKey,
       privateKey,
       setAsMain: body.setAsMain ?? true,
     });
@@ -41,7 +44,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to import legacy wallet.";
-    const status = message.includes("Forbidden") ? 403 : message.includes("token") ? 401 : 500;
+    const status = message.includes("Forbidden")
+      ? 403
+      : message.includes("token")
+        ? 401
+        : message.includes("Invalid") || message.includes("does not match")
+          ? 400
+          : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
