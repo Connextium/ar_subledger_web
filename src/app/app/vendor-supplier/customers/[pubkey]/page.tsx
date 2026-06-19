@@ -26,10 +26,10 @@ export default function LegacyCustomerDetailPage() {
         <p className="font-semibold">Use the new flow:</p>
         <ul className="mt-2 list-disc pl-5">
           <li>
-            Open <Link href="/app/customers" className="underline decoration-slate-300">Customer Master</Link> to select/edit customers and linked ledgers.
+            Open <Link href="/app/vendor-supplier/customers" className="underline decoration-slate-300">Customer Master</Link> to select/edit customers and linked ledgers.
           </li>
           <li>
-            Open <Link href="/app/workflow" className="underline decoration-slate-300">Workflow</Link> to execute invoice and settlement actions with context.
+            Open <Link href="/app/vendor-supplier/workflow" className="underline decoration-slate-300">Workflow</Link> to execute invoice and settlement actions with context.
           </li>
         </ul>
       </div>

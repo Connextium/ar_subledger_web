@@ -7,7 +7,7 @@ import { EmbeddedWallet } from "@/lib/solana/embedded-wallet";
 
 export async function POST(request: NextRequest) {
   try {
-    const { generalLedgerId, workspaceId } = await request.json();
+    const { generalLedgerId, workspaceId, initializationType = "ar" } = await request.json();
 
     if (!generalLedgerId || !workspaceId) {
       return NextResponse.json({ error: "Missing generalLedgerId or workspaceId" }, { status: 400 });
@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
     const result = await accountingEngineService.initializeGlAccounts(
       new PublicKey(ledger.onchain_ledger_key),
       authorityWallet,
+      initializationType as "ar" | "ap",
     );
 
     if (!result.success) {

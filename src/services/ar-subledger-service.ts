@@ -41,6 +41,7 @@ import type {
   WriteOffInvoiceInput,
 } from "@/services/contracts";
 import type { EmbeddedWallet } from "@/lib/solana/embedded-wallet";
+import { accountingEngineService } from "@/services/accounting-engine-service";
 
 function toNumber(value: BN | number): number {
   if (typeof value === "number") return value;
@@ -308,11 +309,20 @@ export class ArSubledgerService
     return record;
   }
 
-  private getPostingAccounts(ledger: LedgerRecord) {
+  private async getPostingAccounts(ledger: LedgerRecord) {
     const accountingLedger = new PublicKey(ledger.accountingLedger);
+    const accountingLedgerRecord = await accountingEngineService.getLedger(accountingLedger);
+    if (!accountingLedgerRecord) {
+      throw new Error(`Accounting ledger not found: ${accountingLedger.toBase58()}`);
+    }
+
+    const arNextId = BigInt(ledger.nextJournalEntryId);
+    const glNextId = accountingLedgerRecord.account.journalEntryCount + 1n;
+    const nextJournalEntryId = arNextId > glNextId ? arNextId : glNextId;
+
     const [journalEntry] = deriveJournalEntryPda(
       accountingLedger,
-      BigInt(ledger.nextJournalEntryId),
+      nextJournalEntryId,
     );
     const [arControlGl] = deriveGlAccountPda(accountingLedger, ledger.arControlAccountCode);
     const [revenueGl] = deriveGlAccountPda(accountingLedger, ledger.revenueAccountCode);
@@ -401,7 +411,7 @@ export class ArSubledgerService
     const ledger = new PublicKey(input.ledgerPubkey);
     const customer = new PublicKey(input.customerPubkey);
     const [invoicePda] = deriveInvoicePda(ledger, input.invoiceNo);
-    const postingAccounts = this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
+    const postingAccounts = await this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
 
     await this.executeWithFundingRetry(async () => {
       await this.sendAndConfirmTransaction(
@@ -440,7 +450,7 @@ export class ArSubledgerService
     const customer = new PublicKey(input.customerPubkey);
     const invoice = new PublicKey(input.invoicePubkey);
     const [receiptPda] = deriveReceiptPda(invoice, BigInt(input.receiptSeq));
-    const postingAccounts = this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
+    const postingAccounts = await this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
 
     await this.executeWithFundingRetry(async () => {
       await this.sendAndConfirmTransaction(
@@ -479,7 +489,7 @@ export class ArSubledgerService
     const customer = new PublicKey(input.customerPubkey);
     const invoice = new PublicKey(input.invoicePubkey);
     const [creditPda] = deriveCreditPda(invoice, BigInt(input.creditSeq));
-    const postingAccounts = this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
+    const postingAccounts = await this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
 
     await this.executeWithFundingRetry(async () => {
       await this.sendAndConfirmTransaction(
@@ -518,7 +528,7 @@ export class ArSubledgerService
     const customer = new PublicKey(input.customerPubkey);
     const invoice = new PublicKey(input.invoicePubkey);
     const [writeoffPda] = deriveWriteOffPda(invoice);
-    const postingAccounts = this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
+    const postingAccounts = await this.getPostingAccounts(await this.getRequiredLedgerRecord(ledger));
 
     await this.executeWithFundingRetry(async () => {
       await this.sendAndConfirmTransaction(

@@ -47,6 +47,12 @@ function normalizeStandaloneGlCode(raw: string): string {
   return `${STANDALONE_GL_PREFIX}${upper.replace(/^GL-?/, "")}`;
 }
 
+function getCanonicalGlAccountName(code: number, currentName: string): string {
+  if (code === 5000) return "Purchase Expense";
+  if (code === 6500) return "Write-off Expense";
+  return currentName;
+}
+
 export default function AccountingHubPage() {
   const { selectedWorkspaceId, workspaces } = useWorkspace();
   const { wallet } = useEmbeddedWallet();
@@ -441,7 +447,9 @@ export default function AccountingHubPage() {
                       {selectedLedger.glAccounts.map((account) => (
                         <tr key={account.account.code} className="hover:bg-gray-50">
                           <td className="px-6 py-3 text-sm font-mono text-gray-900">{account.account.code}</td>
-                          <td className="px-6 py-3 text-sm text-gray-900">{account.account.name}</td>
+                          <td className="px-6 py-3 text-sm text-gray-900">
+                            {getCanonicalGlAccountName(account.account.code, account.account.name)}
+                          </td>
                           <td className="px-6 py-3 text-sm text-gray-600">{account.account.category}</td>
                           <td className="px-6 py-3 text-right text-sm font-mono text-gray-900">
                             {formatAmount(account.account.balance)}
@@ -497,10 +505,10 @@ export default function AccountingHubPage() {
               {selectedLedger.onchain_ledger_key ? (
                 <div className="flex gap-2">
                   <Link
-                    href={`/app/ledgers/${selectedLedger.id}/accounting`}
+                    href={`/app/vendor-supplier/ledgers/${selectedLedger.id}/accounting`}
                     className="inline-block rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
                   >
-                    Manage Base GL Accounting
+                    Manage GL Accounting
                   </Link>
                   <Link
                     href={`/app/accounting/entries/${selectedLedger.id}`}

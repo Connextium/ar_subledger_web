@@ -122,3 +122,38 @@ export const closeInvoiceSchema = z.object({
   customerPubkey: z.string().min(1),
   invoicePubkey: z.string().min(1),
 });
+
+export const initializeBuyerLedgerSchema = z.object({
+  ledgerCode: z
+    .string()
+    .trim()
+    .min(1)
+    .max(24)
+    .regex(/^AP-[A-Z]{2,8}-\d{4}$/, "Buyer AP ledger code must use AP-{REGION}-{YYYY}"),
+  accountingLedgerPubkey: z.string().trim().min(32),
+  apControlAccountCode: z.coerce.number().int().positive(),
+  purchaseAccountCode: z.coerce.number().int().positive(),
+  cashAccountCode: z.coerce.number().int().positive(),
+});
+
+export const createVendorSchema = z.object({
+  vendorCode: z.string().trim().min(1).max(32),
+  vendorName: z.string().trim().min(1).max(80),
+});
+
+export const receiveVendorInvoiceSchema = z.object({
+  invoiceNo: z.string().trim().min(1).max(40),
+  amount: z.string().trim().min(1),
+  invoiceDate: z.string().trim().min(1),
+  dueDate: z.string().trim().min(1),
+  currency: z.string().trim().min(1).max(12),
+  description: z.string().max(160),
+  documentHash: z.string().max(88),
+});
+
+export const payVendorInvoiceSchema = z.object({
+  paymentNo: z.string().trim().min(1).max(40),
+  amount: z.string().trim().min(1),
+  paymentDate: z.string().trim().min(1),
+  paymentReference: z.string().max(64),
+});

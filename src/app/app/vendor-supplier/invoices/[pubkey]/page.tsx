@@ -77,20 +77,20 @@ export default function InvoiceDetailPage() {
         actions={
           <div className="flex gap-2 text-[11px]">
             {customer ? (
-              <Link href="/app/customers" className="underline decoration-slate-300">
+              <Link href="/app/vendor-supplier/customers" className="underline decoration-slate-300">
                 Customer
               </Link>
             ) : null}
-            <Link href="/app/workflow#record-receipt" className="underline decoration-slate-300">
+            <Link href="/app/vendor-supplier/workflow#record-receipt" className="underline decoration-slate-300">
               Receipt
             </Link>
-            <Link href="/app/workflow#issue-credit-note" className="underline decoration-slate-300">
+            <Link href="/app/vendor-supplier/workflow#issue-credit-note" className="underline decoration-slate-300">
               Credit
             </Link>
-            <Link href="/app/workflow#write-off-invoice" className="underline decoration-slate-300">
+            <Link href="/app/vendor-supplier/workflow#write-off-invoice" className="underline decoration-slate-300">
               Write-off
             </Link>
-            <Link href="/app/workflow#close-invoice" className="underline decoration-slate-300">
+            <Link href="/app/vendor-supplier/workflow#close-invoice" className="underline decoration-slate-300">
               Close
             </Link>
           </div>

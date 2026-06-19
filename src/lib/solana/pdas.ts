@@ -1,5 +1,10 @@
 import { PublicKey } from "@solana/web3.js";
-import { ACCOUNTING_ENGINE_PROGRAM_ID, PROGRAM_ID, SEEDS } from "@/lib/solana/constants";
+import {
+  ACCOUNTING_ENGINE_PROGRAM_ID,
+  AP_SUBLEDGER_PROGRAM_ID,
+  PROGRAM_ID,
+  SEEDS,
+} from "@/lib/solana/constants";
 
 function u64ToLeBuffer(value: bigint): Buffer {
   if (value < 0n) {
@@ -83,4 +88,33 @@ export function deriveCreditPda(invoice: PublicKey, seq: bigint): [PublicKey, nu
 
 export function deriveWriteOffPda(invoice: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([SEEDS.writeoff, invoice.toBuffer()], PROGRAM_ID);
+}
+
+export function deriveBuyerLedgerPda(authority: PublicKey, ledgerCode: string): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.buyerLedger, authority.toBuffer(), Buffer.from(ledgerCode)],
+    AP_SUBLEDGER_PROGRAM_ID,
+  );
+}
+
+export function deriveVendorPda(ledger: PublicKey, vendorCode: string): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.vendor, ledger.toBuffer(), Buffer.from(vendorCode)],
+    AP_SUBLEDGER_PROGRAM_ID,
+  );
+}
+
+export function deriveVendorInvoicePda(ledger: PublicKey, invoiceNo: string): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.vendorInvoice, ledger.toBuffer(), Buffer.from(invoiceNo)],
+    AP_SUBLEDGER_PROGRAM_ID,
+  );
+}
+
+export function deriveVendorPaymentPda(invoice: PublicKey, seq: bigint): [PublicKey, number] {
+  const seqBuf = u64ToLeBuffer(seq);
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.vendorPayment, invoice.toBuffer(), seqBuf],
+    AP_SUBLEDGER_PROGRAM_ID,
+  );
 }

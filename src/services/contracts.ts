@@ -6,6 +6,10 @@ import type {
   LedgerRecord,
   ReceiptRecord,
   WriteOffRecord,
+  BuyerLedgerRecord,
+  VendorInvoiceRecord,
+  VendorPaymentRecord,
+  VendorRecord,
 } from "@/lib/types/domain";
 
 export type TransactionSubmissionHooks = {
@@ -83,6 +87,43 @@ export type CloseInvoiceInput = TransactionSubmissionHooks & {
   invoicePubkey: string;
 };
 
+export type InitializeBuyerLedgerInput = {
+  ledgerCode: string;
+  accountingLedgerPubkey: string;
+  apControlAccountCode: number;
+  purchaseAccountCode: number;
+  cashAccountCode: number;
+};
+
+export type CreateVendorInput = {
+  ledgerPubkey: string;
+  vendorCode: string;
+  vendorName: string;
+};
+
+export type ReceiveVendorInvoiceInput = TransactionSubmissionHooks & {
+  ledgerPubkey: string;
+  vendorPubkey: string;
+  invoiceNo: string;
+  amountMinor: number;
+  invoiceDateUnix: number;
+  dueDateUnix: number;
+  currency: string;
+  description: string;
+  documentHash: string;
+};
+
+export type PayVendorInvoiceInput = TransactionSubmissionHooks & {
+  ledgerPubkey: string;
+  vendorPubkey: string;
+  invoicePubkey: string;
+  paymentSeq: number;
+  paymentNo: string;
+  amountMinor: number;
+  paymentDateUnix: number;
+  paymentReference: string;
+};
+
 export interface LedgerService {
   initializeLedger(input: InitializeLedgerInput): Promise<string>;
   listLedgers(): Promise<LedgerRecord[]>;
@@ -111,4 +152,15 @@ export interface SettlementService {
   listCreditNotes(invoicePubkey?: string): Promise<CreditNoteRecord[]>;
   listWriteOffs(invoicePubkey?: string): Promise<WriteOffRecord[]>;
   listActivity(): Promise<ActivityItem[]>;
+}
+
+export interface ApSubledgerService {
+  initializeBuyerLedger(input: InitializeBuyerLedgerInput): Promise<string>;
+  createVendor(input: CreateVendorInput): Promise<string>;
+  receiveVendorInvoice(input: ReceiveVendorInvoiceInput): Promise<string>;
+  payVendorInvoice(input: PayVendorInvoiceInput): Promise<string>;
+  listBuyerLedgers(): Promise<BuyerLedgerRecord[]>;
+  listVendors(ledgerPubkey?: string): Promise<VendorRecord[]>;
+  listVendorInvoices(ledgerPubkey?: string): Promise<VendorInvoiceRecord[]>;
+  listVendorPayments(invoicePubkey?: string): Promise<VendorPaymentRecord[]>;
 }

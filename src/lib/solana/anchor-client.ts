@@ -5,6 +5,7 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { env } from "@/lib/config/env";
 import type { EmbeddedWallet } from "@/lib/solana/embedded-wallet";
 import idl from "@/lib/solana/ar_subledger.idl.json";
+import apIdl from "@/lib/solana/ap_subledger.idl.json";
 
 export const connection = new Connection(env.solanaRpcUrl, {
   commitment: "confirmed",
@@ -28,6 +29,15 @@ export function createArSubledgerProgram(wallet: EmbeddedWallet): Program<Idl> {
     ...(idl as Idl & { address?: string }),
     // Force runtime program ID from env so frontend is not blocked by stale copied IDL address.
     address: env.programId,
+  };
+  return new Program(runtimeIdl as Idl, provider);
+}
+
+export function createApSubledgerProgram(wallet: EmbeddedWallet): Program<Idl> {
+  const provider = createAnchorProvider(wallet);
+  const runtimeIdl = {
+    ...(apIdl as Idl & { address?: string }),
+    address: env.apSubledgerProgramId,
   };
   return new Program(runtimeIdl as Idl, provider);
 }

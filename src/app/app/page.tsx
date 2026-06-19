@@ -120,13 +120,13 @@ export default function DashboardPage() {
           subtitle="Execute on-chain AR lifecycle actions with validation and role checks."
         >
           <div className="grid grid-cols-2 gap-2 text-[11px]">
-            <QuickLink href="/app/workflow#initialize-ledger" label="Initialize ledger" />
-            <QuickLink href="/app/workflow#create-customer" label="Create customer" />
-            <QuickLink href="/app/workflow#issue-invoice" label="Issue invoice" />
-            <QuickLink href="/app/workflow#record-receipt" label="Record receipt" />
-            <QuickLink href="/app/workflow#issue-credit-note" label="Issue credit note" />
-            <QuickLink href="/app/workflow#write-off-invoice" label="Write off invoice" />
-            <QuickLink href="/app/workflow#close-invoice" label="Close invoice" />
+            <QuickLink href="/app/vendor-supplier/workflow#initialize-ledger" label="Initialize ledger" />
+            <QuickLink href="/app/vendor-supplier/workflow#create-customer" label="Create customer" />
+            <QuickLink href="/app/vendor-supplier/workflow#issue-invoice" label="Issue invoice" />
+            <QuickLink href="/app/vendor-supplier/workflow#record-receipt" label="Record receipt" />
+            <QuickLink href="/app/vendor-supplier/workflow#issue-credit-note" label="Issue credit note" />
+            <QuickLink href="/app/vendor-supplier/workflow#write-off-invoice" label="Write off invoice" />
+            <QuickLink href="/app/vendor-supplier/workflow#close-invoice" label="Close invoice" />
           </div>
         </Panel>
 

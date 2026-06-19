@@ -19,7 +19,7 @@ interface GLAccountSpec {
   description: string;
 }
 
-const DEFAULT_GL_ACCOUNTS: GLAccountSpec[] = [
+const AR_GL_ACCOUNTS: GLAccountSpec[] = [
   {
     code: 1000,
     name: "Cash",
@@ -42,7 +42,7 @@ const DEFAULT_GL_ACCOUNTS: GLAccountSpec[] = [
     description: "Sales and service revenue",
   },
   {
-    code: 5000,
+    code: 6500,
     name: "Write-off Expense",
     category: "Expense",
     normalSide: "Debit",
@@ -50,9 +50,39 @@ const DEFAULT_GL_ACCOUNTS: GLAccountSpec[] = [
   },
 ];
 
+const AP_GL_ACCOUNTS: GLAccountSpec[] = [
+  {
+    code: 1000,
+    name: "Cash",
+    category: "Asset",
+    normalSide: "Debit",
+    description: "Cash and cash equivalents",
+  },
+  {
+    code: 2100,
+    name: "AP Control",
+    category: "Liability",
+    normalSide: "Credit",
+    description: "Accounts payable liability control",
+  },
+  {
+    code: 5000,
+    name: "Purchase Expense",
+    category: "Expense",
+    normalSide: "Debit",
+    description: "Cost of goods and services purchased",
+  },
+];
+
 interface Props {
   ledgerKey: string;
   generalLedgerId: string;
+}
+
+function getCanonicalGlAccountName(code: number, currentName: string): string {
+  if (code === 5000) return "Purchase Expense";
+  if (code === 6500) return "Write-off Expense";
+  return currentName;
 }
 
 export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) {
@@ -66,8 +96,19 @@ export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [initializationType, setInitializationType] = useState<"ar" | "ap">("ar");
 
-  const isInitialized = glAccounts.length === 4;
+  const getAccountsToInitialize = () =>
+    initializationType === "ar" ? AR_GL_ACCOUNTS : AP_GL_ACCOUNTS;
+
+  const existingCodes = new Set(glAccounts.map((a) => a.account.code));
+  const missingArCodes = AR_GL_ACCOUNTS.filter((account) => !existingCodes.has(account.code));
+  const missingApCodes = AP_GL_ACCOUNTS.filter((account) => !existingCodes.has(account.code));
+  const hasArAccounts = missingArCodes.length === 0;
+  const hasApAccounts = missingApCodes.length === 0;
+  const canInitializeAr = missingArCodes.length > 0;
+  const canInitializeAp = missingApCodes.length > 0;
+  const isFullyInitialized = hasArAccounts && hasApAccounts;
 
   // Load existing GL accounts
   const loadGlAccounts = useCallback(async () => {
@@ -75,6 +116,7 @@ export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) 
     try {
       setIsLoading(true);
       const accounts = await accountingEngineService.listGlAccounts(new PublicKey(ledgerKey));
+      console.log("[GL Setup] Loaded accounts:", accounts.map((a) => ({ code: a.account.code, name: a.account.name })));
       setGlAccounts(accounts);
     } catch (err) {
       console.error("Error loading GL accounts:", err);
@@ -114,6 +156,7 @@ export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) 
         body: JSON.stringify({
           generalLedgerId: effectiveGeneralLedgerId,
           workspaceId: selectedWorkspaceId,
+          initializationType,
         }),
       });
 
@@ -133,8 +176,11 @@ export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) 
 
       setSuccess(`GL accounts initialized successfully. Transaction: ${data.txs?.[0]?.slice(0, 8)}...`);
 
-      // Reload GL accounts
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Reload GL accounts after transaction confirmation
+      // Wait longer to ensure on-chain state is updated
+      console.log(`[GL Setup] Waiting for ${initializationType} account confirmation, then reloading...`);
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      console.log("[GL Setup] Reloading GL accounts after confirmation...");
       await loadGlAccounts();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to initialize GL accounts");
@@ -167,35 +213,74 @@ export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) 
           <div>
             <h3 className="text-lg font-semibold">GL Accounts Status</h3>
             <p className="mt-1 text-sm text-gray-600">
-              {isInitialized ? (
+              {isFullyInitialized ? (
                 <span className="flex items-center gap-2 text-green-600">
                   <CheckCircle className="h-4 w-4" />
-                  Initialized
+                  AR & AP Initialized
+                </span>
+              ) : hasArAccounts && hasApAccounts ? (
+                <span className="flex items-center gap-2 text-green-600">
+                  <CheckCircle className="h-4 w-4" />
+                  All Accounts Initialized
                 </span>
               ) : (
-                <span className="text-amber-600">Not Initialized</span>
+                <span className="text-amber-600">
+                  {hasArAccounts
+                    ? "AR Initialized, AP Pending"
+                    : hasApAccounts
+                      ? "AP Initialized, AR Pending"
+                      : "Not Initialized"}
+                </span>
               )}
             </p>
           </div>
-          {!isInitialized && (
-            <Button
-              onClick={handleInitializeGlAccounts}
-              disabled={isInitializing}
-              size="lg"
-            >
-              {isInitializing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Initialize GL Accounts
-            </Button>
+          {!isFullyInitialized && (
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex gap-2 rounded-lg border border-gray-300 bg-gray-50 p-1">
+                <button
+                  onClick={() => setInitializationType("ar")}
+                  disabled={!canInitializeAr}
+                  className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
+                    initializationType === "ar"
+                      ? "bg-blue-600 text-white"
+                      : "text-gray-700 hover:bg-gray-200 disabled:text-gray-400"
+                  }`}
+                >
+                  {canInitializeAr ? `Initialize AR (${missingArCodes.length})` : "AR ✓"}
+                </button>
+                <button
+                  onClick={() => setInitializationType("ap")}
+                  disabled={!canInitializeAp}
+                  className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
+                    initializationType === "ap"
+                      ? "bg-blue-600 text-white"
+                      : "text-gray-700 hover:bg-gray-200 disabled:text-gray-400"
+                  }`}
+                >
+                  {canInitializeAp ? `Initialize AP (${missingApCodes.length})` : "AP ✓"}
+                </button>
+              </div>
+              <Button
+                onClick={handleInitializeGlAccounts}
+                disabled={isInitializing || !((initializationType === "ar" && canInitializeAr) || (initializationType === "ap" && canInitializeAp))}
+                size="lg"
+              >
+                {isInitializing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {initializationType === "ar" ? "Initialize AR Accounts" : "Initialize AP Accounts"}
+              </Button>
+            </div>
           )}
         </div>
 
-        {!isInitialized && (
+        {!isFullyInitialized && (
           <div className="mt-4 rounded bg-blue-50 p-4">
             <p className="text-sm font-medium text-blue-900">
-              The following 4 GL accounts will be created:
+              The following missing {initializationType === "ar" ? "AR" : "AP"} GL accounts will be created:
             </p>
             <ul className="mt-3 space-y-2">
-              {DEFAULT_GL_ACCOUNTS.map((account) => (
+              {getAccountsToInitialize()
+                .filter((account) => !existingCodes.has(account.code))
+                .map((account) => (
                 <li key={account.code} className="text-sm text-blue-800">
                   <span className="font-mono font-semibold">{account.code}</span> - {account.name} (
                   {account.category}, {account.normalSide} normal)
@@ -212,36 +297,57 @@ export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) 
           <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
         </div>
       ) : glAccounts.length > 0 ? (
-        <div className="rounded-lg border overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Code</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Name</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Category</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Normal Side</th>
-                <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">Balance</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {glAccounts.map((account) => (
-                <tr key={account.account.code} className="hover:bg-gray-50">
-                  <td className="px-6 py-3 text-sm font-mono text-gray-900">{account.account.code}</td>
-                  <td className="px-6 py-3 text-sm text-gray-900">{account.account.name}</td>
-                  <td className="px-6 py-3 text-sm text-gray-600">{account.account.category}</td>
-                  <td className="px-6 py-3 text-sm text-gray-600">{account.account.normalSide}</td>
-                  <td className="px-6 py-3 text-right text-sm font-mono text-gray-900">
-                    {(Number(account.account.balance) / 100).toFixed(2)}
-                  </td>
+        <div className="space-y-6">
+          <div className="rounded-lg border overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Code</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Name</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Category</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Normal Side</th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">Balance</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y">
+                {glAccounts.map((account) => (
+                  <tr key={account.account.code} className="hover:bg-gray-50">
+                    <td className="px-6 py-3 text-sm font-mono text-gray-900">{account.account.code}</td>
+                    <td className="px-6 py-3 text-sm text-gray-900">
+                      {getCanonicalGlAccountName(account.account.code, account.account.name)}
+                    </td>
+                    <td className="px-6 py-3 text-sm text-gray-600">{account.account.category}</td>
+                    <td className="px-6 py-3 text-sm text-gray-600">{account.account.normalSide}</td>
+                    <td className="px-6 py-3 text-right text-sm font-mono text-gray-900">
+                      {(Number(account.account.balance) / 100).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {!isFullyInitialized && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-medium text-amber-900">
+                {canInitializeAr && canInitializeAp
+                  ? "AR & AP accounts are pending initialization"
+                  : canInitializeAr
+                    ? "AR accounts are pending initialization"
+                    : "AP accounts are pending initialization"}
+              </p>
+              <p className="mt-1 text-sm text-amber-800">
+                Use the toggle buttons above to select which accounts to initialize next.
+              </p>
+            </div>
+          )}
         </div>
-      ) : !isInitialized ? (
+      ) : !isFullyInitialized ? (
         <div className="rounded-lg border border-dashed p-8 text-center">
           <p className="text-gray-600">GL accounts have not been initialized yet.</p>
-          <p className="mt-1 text-sm text-gray-500">Click the button above to create the 4 default GL accounts.</p>
+          <p className="mt-1 text-sm text-gray-500">
+            Use the toggle buttons above to select AR or AP, then click initialize to create the accounts.
+          </p>
         </div>
       ) : null}
     </div>

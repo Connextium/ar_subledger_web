@@ -81,6 +81,61 @@ export type WriteOffRecord = {
   journalEntryId: number;
 };
 
+export type BuyerLedgerRecord = {
+  pubkey: string;
+  authority: string;
+  ledgerCode: string;
+  accountingLedger: string;
+  apControlAccountCode: number;
+  purchaseAccountCode: number;
+  cashAccountCode: number;
+  nextJournalEntryId: number;
+  vendorCount: number;
+  invoiceCount: number;
+};
+
+export type VendorRecord = {
+  pubkey: string;
+  ledger: string;
+  vendorCode: string;
+  vendorName: string;
+  status: number;
+  totalOpenPayable: number;
+  totalInvoiced: number;
+  totalPaid: number;
+  invoiceCount: number;
+};
+
+export type VendorInvoiceRecord = {
+  pubkey: string;
+  ledger: string;
+  vendor: string;
+  invoiceNo: string;
+  originalAmount: number;
+  openAmount: number;
+  paidAmount: number;
+  adjustedAmount: number;
+  currency: string;
+  description: string;
+  documentHash: string;
+  invoiceDate: number;
+  dueDate: number;
+  status: number;
+  paymentSeq: number;
+  journalEntryId: number;
+};
+
+export type VendorPaymentRecord = {
+  pubkey: string;
+  invoice: string;
+  paymentSeq: number;
+  paymentNo: string;
+  amount: number;
+  paymentDate: number;
+  paymentReference: string;
+  journalEntryId: number;
+};
+
 export type ActivityItem = {
   id: string;
   type:
@@ -158,6 +213,42 @@ export type WorkspaceCustomerLedgerLink = {
   onchainCustomerPubkey: string;
   customerCode: string;
   status: WorkspaceCustomerLedgerLinkStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkspaceVendorStatus = "active" | "inactive" | "archived";
+
+export type WorkspaceVendor = {
+  id: string;
+  workspaceId: string;
+  vendorRef: string;
+  legalName: string;
+  taxId: string | null;
+  status: WorkspaceVendorStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkspaceBuyerLedgerLink = {
+  id: string;
+  workspaceId: string;
+  ledgerPda: string;
+  ledgerCode: string;
+  authorityPubkey: string;
+  accountingLedgerKey: string | null;
+  status: "active" | "inactive";
+  createdAt: string;
+};
+
+export type WorkspaceVendorLedgerLink = {
+  id: string;
+  workspaceId: string;
+  workspaceVendorId: string;
+  ledgerPda: string;
+  onchainVendorPubkey: string;
+  vendorCode: string;
+  status: "active" | "inactive";
   createdAt: string;
   updatedAt: string;
 };

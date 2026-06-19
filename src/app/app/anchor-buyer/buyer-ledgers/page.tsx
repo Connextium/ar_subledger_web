@@ -1,0 +1,139 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { PageTitle } from "@/components/ui/page-title";
+import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
+import type { BuyerLedgerRecord } from "@/lib/types/domain";
+import { accountingEngineService, type AccountingLedger } from "@/services/accounting-engine-service";
+import { createApSubledgerService } from "@/services/ap-subledger-service";
+
+export default function BuyerLedgersPage() {
+  const { wallet } = useEmbeddedWallet();
+  const service = useMemo(() => (wallet ? createApSubledgerService(wallet) : null), [wallet]);
+  const [rows, setRows] = useState<BuyerLedgerRecord[]>([]);
+  const [accountingLedgers, setAccountingLedgers] = useState<AccountingLedger[]>([]);
+  const [ledgerCode, setLedgerCode] = useState("");
+  const [accountingLedgerPubkey, setAccountingLedgerPubkey] = useState("");
+  const [apControlAccountCode, setApControlAccountCode] = useState("2100");
+  const [purchaseAccountCode, setPurchaseAccountCode] = useState("5000");
+  const [cashAccountCode, setCashAccountCode] = useState("1000");
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!service) {
+      setRows([]);
+      return;
+    }
+    void service.listBuyerLedgers().then(setRows).catch((error) => setMessage(String(error)));
+  }, [service]);
+
+  useEffect(() => {
+    if (!wallet) {
+      setAccountingLedgers([]);
+      setAccountingLedgerPubkey("");
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const ledgers = await accountingEngineService.listLedgersByAuthority(wallet.publicKey);
+        if (cancelled) return;
+
+        setAccountingLedgers(ledgers);
+        setAccountingLedgerPubkey((current) => current || ledgers[0]?.publicKey.toBase58() || "");
+      } catch (error) {
+        if (cancelled) return;
+        setMessage(error instanceof Error ? error.message : String(error));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [wallet]);
+
+  async function handleCreate() {
+    if (!service) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const pubkey = await service.initializeBuyerLedger({
+        ledgerCode,
+        accountingLedgerPubkey,
+        apControlAccountCode: Number(apControlAccountCode),
+        purchaseAccountCode: Number(purchaseAccountCode),
+        cashAccountCode: Number(cashAccountCode),
+      });
+      setMessage(`Created buyer ledger ${pubkey}`);
+      setRows(await service.listBuyerLedgers());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <PageTitle title="Buyer Ledgers" subtitle="Configure AP subledgers for Anchor buyer workflows." />
+      {message ? <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">{message}</p> : null}
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <h2 className="text-xs font-semibold text-slate-900">Create Buyer AP Ledger</h2>
+        <div className="mt-2 grid gap-2 md:grid-cols-2">
+          <Input
+            label="Ledger Code"
+            value={ledgerCode}
+            onChange={(event) => setLedgerCode(event.target.value.toUpperCase())}
+            placeholder="AP-NA-2026"
+          />
+          <p className="-mt-1 text-[10px] text-slate-500 md:col-span-2">
+            Use the format <span className="font-mono">AP-{`{REGION}`}-{`{YYYY}`}</span>, for example{' '}
+            <span className="font-mono">AP-NA-2026</span>.
+          </p>
+          <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-700">
+            <span>Base GL Ledger</span>
+            <select
+              className="rounded-md border border-slate-300 bg-white px-2 py-2 text-xs text-slate-800"
+              value={accountingLedgerPubkey}
+              onChange={(event) => setAccountingLedgerPubkey(event.target.value)}
+            >
+              <option value="">Select accounting ledger</option>
+              {accountingLedgers.map((ledger) => {
+                const pubkey = ledger.publicKey.toBase58();
+                const code = ledger.account.ledgerCode || "(no code)";
+                return (
+                  <option key={pubkey} value={pubkey}>
+                    {code} ({pubkey})
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          <Input label="AP Control Code" value={apControlAccountCode} onChange={(event) => setApControlAccountCode(event.target.value)} />
+          <Input label="Purchase Account Code" value={purchaseAccountCode} onChange={(event) => setPurchaseAccountCode(event.target.value)} />
+          <Input label="Cash Account Code" value={cashAccountCode} onChange={(event) => setCashAccountCode(event.target.value)} />
+        </div>
+        <div className="mt-3">
+          <Button disabled={!wallet || busy} onClick={handleCreate}>Create Buyer Ledger</Button>
+        </div>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <h2 className="text-xs font-semibold text-slate-900">Buyer Ledger Inventory</h2>
+        <div className="mt-2 space-y-2">
+          {rows.map((row) => (
+            <div key={row.pubkey} className="rounded-md border border-slate-200 px-3 py-2 text-[11px] text-slate-600">
+              <p className="font-semibold text-slate-900">{row.ledgerCode}</p>
+              <p className="font-mono">{row.pubkey}</p>
+              <p>AP {row.apControlAccountCode} | Purchase {row.purchaseAccountCode} | Cash {row.cashAccountCode}</p>
+            </div>
+          ))}
+          {rows.length === 0 ? <p className="text-[11px] text-slate-500">No buyer ledgers loaded.</p> : null}
+        </div>
+      </section>
+    </div>
+  );
+}

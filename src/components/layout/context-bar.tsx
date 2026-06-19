@@ -18,7 +18,11 @@ export function ContextBar() {
     clearContext,
   } = useWorkingContext();
 
-  if (pathname.startsWith("/app/ledgers") || pathname.startsWith("/app/configuration")) {
+  if (
+    pathname.startsWith("/app/vendor-supplier/ledgers") ||
+    pathname.startsWith("/app/vendor-supplier/ledgers") ||
+    pathname.startsWith("/app/configuration")
+  ) {
     return null;
   }
 

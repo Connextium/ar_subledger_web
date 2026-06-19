@@ -138,6 +138,28 @@ class AccountingEngineService {
         const ledgerCodeLen = data.readUInt32LE(offset);
         offset += 4;
 
+        // Current deployments encode ledger_code as a normal Borsh string.
+        const variableStringEnd = offset + ledgerCodeLen + 8 + 1;
+        if (ledgerCodeLen <= MAX_LEDGER_CODE_LEN && variableStringEnd <= data.length) {
+          const ledgerCode = data.subarray(offset, offset + ledgerCodeLen).toString("utf8");
+          offset += ledgerCodeLen;
+
+          const journalEntryCount = data.readBigUInt64LE(offset);
+          offset += 8;
+
+          const bump = data.readUInt8(offset);
+
+          return {
+            authority,
+            ledgerCode,
+            ledger_code: ledgerCode,
+            journalEntryCount,
+            journal_entry_count: journalEntryCount,
+            bump,
+          };
+        }
+
+        // Older deployments stored ledger_code in a fixed-width region.
         const codeRegion = data.subarray(offset, offset + MAX_LEDGER_CODE_LEN);
         offset += MAX_LEDGER_CODE_LEN;
 
@@ -226,43 +248,66 @@ class AccountingEngineService {
   }
 
   /**
-   * Initialize 4 default GL accounts (Cash, AR Control, Revenue, Write-off Expense)
+   * Initialize default GL accounts (AR or AP)
    * Must be called after ledger initialization
+   * @param accountType 'ar' for AR accounts (1000, 1100, 4000, 6500) or 'ap' for AP accounts (1000, 2100, 5000)
    */
   async initializeGlAccounts(
     ledgerKey: PublicKey,
     authority: EmbeddedWallet | Keypair,
+    accountType: "ar" | "ap" = "ar",
   ): Promise<{ success: boolean; txs: string[]; error?: string }> {
     try {
       const program = await this.getProgram();
       const provider = getProvider() as AnchorProvider;
 
-      const defaultAccounts = [
-        {
-          code: 1000,
-          name: "Cash",
-          category: "Asset",
-          normalSide: "Debit",
-        },
-        {
-          code: 1100,
-          name: "AR Control",
-          category: "Asset",
-          normalSide: "Debit",
-        },
-        {
-          code: 4000,
-          name: "Revenue",
-          category: "Revenue",
-          normalSide: "Credit",
-        },
-        {
-          code: 5000,
-          name: "Write-off Expense",
-          category: "Expense",
-          normalSide: "Debit",
-        },
-      ];
+      const defaultAccounts = accountType === "ar"
+        ? [
+            {
+              code: 1000,
+              name: "Cash",
+              category: "Asset",
+              normalSide: "Debit",
+            },
+            {
+              code: 1100,
+              name: "AR Control",
+              category: "Asset",
+              normalSide: "Debit",
+            },
+            {
+              code: 4000,
+              name: "Revenue",
+              category: "Revenue",
+              normalSide: "Credit",
+            },
+            {
+              code: 6500,
+              name: "Write-off Expense",
+              category: "Expense",
+              normalSide: "Debit",
+            },
+          ]
+        : [
+            {
+              code: 1000,
+              name: "Cash",
+              category: "Asset",
+              normalSide: "Debit",
+            },
+            {
+              code: 2100,
+              name: "AP Control",
+              category: "Liability",
+              normalSide: "Credit",
+            },
+            {
+              code: 5000,
+              name: "Purchase Expense",
+              category: "Expense",
+              normalSide: "Debit",
+            },
+          ];
 
       const txs: string[] = [];
 
@@ -934,19 +979,23 @@ class AccountingEngineService {
       };
       return objMap[key] ?? "Asset";
     }
-    // Fallback: raw u8 from #[repr(u8)] explicit discriminants (Asset=1..Expense=5)
-    // Also handle 0-based Borsh index as a last resort
-    const numMap: Record<number, "Asset" | "Liability" | "Equity" | "Revenue" | "Expense"> = {
-      // 1-based (#[repr(u8)] explicit values)
-      1: "Asset",
-      2: "Liability",
-      3: "Equity",
-      4: "Revenue",
-      5: "Expense",
-      // 0-based Borsh variant index fallback
+    // Fallback: prefer Anchor/Borsh enum index decoding (0..4),
+    // with a compatibility case for explicit repr value 5 => Expense.
+    const value = category as number;
+    const borshIndexMap: Record<number, "Asset" | "Liability" | "Equity" | "Revenue" | "Expense"> = {
       0: "Asset",
+      1: "Liability",
+      2: "Equity",
+      3: "Revenue",
+      4: "Expense",
     };
-    return numMap[category as number] ?? "Asset";
+    if (value in borshIndexMap) {
+      return borshIndexMap[value];
+    }
+    if (value === 5) {
+      return "Expense";
+    }
+    return "Asset";
   }
 
   private mapNormalSide(normalSide: unknown): "Debit" | "Credit" {

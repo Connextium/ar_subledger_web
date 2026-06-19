@@ -7,16 +7,32 @@ import { useTheme } from "@/context/theme-context";
 
 const navSections = [
   {
-    title: "Subledger Protocol",
+    title: "Workspace",
     links: [
       { href: "/app", label: "Dashboard" },
-      { href: "/app/workflow", label: "Workflow" },
-      { href: "/app/ledgers", label: "Ledgers" },
-      { href: "/app/customers", label: "Customers" },
-      { href: "/app/invoices", label: "Invoices" },
-      { href: "/app/settlements", label: "Settlements" },
-      { href: "/app/timeline", label: "Activity" },
       { href: "/app/configuration", label: "Configuration" },
+    ],
+  },
+  {
+    title: "Anchor Buyer",
+    links: [
+      { href: "/app/anchor-buyer", label: "Buyer Home" },
+      { href: "/app/anchor-buyer/buyer-ledgers", label: "Buyer Ledgers" },
+      { href: "/app/anchor-buyer/vendors", label: "Vendors" },
+      { href: "/app/anchor-buyer/vendor-invoices", label: "Vendor Invoices" },
+      { href: "/app/anchor-buyer/payments", label: "Vendor Payments" },
+      { href: "/app/anchor-buyer/workflow", label: "Buyer Workflow" },
+    ],
+  },
+  {
+    title: "Vendor Supplier",
+    links: [
+      { href: "/app/vendor-supplier/workflow", label: "Supplier Workflow" },
+      { href: "/app/vendor-supplier/ledgers", label: "AR Ledgers" },
+      { href: "/app/vendor-supplier/customers", label: "Customers" },
+      { href: "/app/vendor-supplier/invoices", label: "Customer Invoices" },
+      { href: "/app/vendor-supplier/settlements", label: "Settlements" },
+      { href: "/app/vendor-supplier/timeline", label: "Activity" },
     ],
   },
   {
@@ -65,10 +81,11 @@ export function Sidebar() {
               const isBaseGlRoute =
                 pathname === "/app/accounting" ||
                 pathname.startsWith("/app/accounting/") ||
+                /^\/app\/vendor-supplier\/ledgers\/[^/]+\/accounting(?:\/.*)?$/.test(pathname) ||
                 /^\/app\/ledgers\/[^/]+\/accounting(?:\/.*)?$/.test(pathname);
 
               // Ledgers should NOT be highlighted on Base GL - Accounting Management pages
-              const isLedgerRoute = item.href === "/app/ledgers";
+              const isLedgerRoute = item.href === "/app/vendor-supplier/ledgers";
               const active =
                 item.href === "/app"
                   ? pathname === "/app"

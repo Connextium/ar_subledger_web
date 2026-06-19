@@ -7,8 +7,11 @@ import type {
   WorkspaceCustomer,
   WorkspaceCustomerCodeRegistryEntry,
   WorkspaceCustomerLedgerLink,
+  WorkspaceBuyerLedgerLink,
   WorkspaceLedgerLink,
   WorkspaceMember,
+  WorkspaceVendor,
+  WorkspaceVendorLedgerLink,
 } from "@/lib/types/domain";
 import { env } from "@/lib/config/env";
 
@@ -21,7 +24,24 @@ type LocalControlPlane = {
   customers: WorkspaceCustomer[];
   customerCodeRegistry: WorkspaceCustomerCodeRegistryEntry[];
   customerLedgerLinks: WorkspaceCustomerLedgerLink[];
+  vendors: WorkspaceVendor[];
+  buyerLedgerLinks: WorkspaceBuyerLedgerLink[];
+  vendorLedgerLinks: WorkspaceVendorLedgerLink[];
 };
+
+function emptyLocalState(): LocalControlPlane {
+  return {
+    workspaces: [],
+    members: [],
+    ledgers: [],
+    customers: [],
+    customerCodeRegistry: [],
+    customerLedgerLinks: [],
+    vendors: [],
+    buyerLedgerLinks: [],
+    vendorLedgerLinks: [],
+  };
+}
 
 function isSupabaseConfigured(): boolean {
   return Boolean(env.supabaseUrl && env.supabaseAnonKey);
@@ -29,25 +49,10 @@ function isSupabaseConfigured(): boolean {
 
 function readLocalState(): LocalControlPlane {
   if (typeof window === "undefined") {
-    return {
-      workspaces: [],
-      members: [],
-      ledgers: [],
-      customers: [],
-      customerCodeRegistry: [],
-      customerLedgerLinks: [],
-    };
+    return emptyLocalState();
   }
   const raw = window.localStorage.getItem(LOCAL_CONTROL_PLANE_KEY);
-  if (!raw)
-    return {
-      workspaces: [],
-      members: [],
-      ledgers: [],
-      customers: [],
-      customerCodeRegistry: [],
-      customerLedgerLinks: [],
-    };
+  if (!raw) return emptyLocalState();
   try {
     const parsed = JSON.parse(raw) as Partial<LocalControlPlane>;
     return {
@@ -57,6 +62,9 @@ function readLocalState(): LocalControlPlane {
       customers: parsed.customers ?? [],
       customerCodeRegistry: parsed.customerCodeRegistry ?? [],
       customerLedgerLinks: parsed.customerLedgerLinks ?? [],
+      vendors: parsed.vendors ?? [],
+      buyerLedgerLinks: parsed.buyerLedgerLinks ?? [],
+      vendorLedgerLinks: parsed.vendorLedgerLinks ?? [],
     };
   } catch (e) {
     // Debug log for persistent corruption
@@ -64,14 +72,7 @@ function readLocalState(): LocalControlPlane {
       raw,
       error: e,
     });
-    return {
-      workspaces: [],
-      members: [],
-      ledgers: [],
-      customers: [],
-      customerCodeRegistry: [],
-      customerLedgerLinks: [],
-    };
+    return emptyLocalState();
   }
 }
 
@@ -739,6 +740,243 @@ export class ControlPlaneService {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
+  }
+
+  async listWorkspaceVendors(workspaceId: string): Promise<WorkspaceVendor[]> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      return state.vendors.filter((vendor) => vendor.workspaceId === workspaceId);
+    }
+
+    const { data, error } = await supabase
+      .from("workspace_vendors")
+      .select("id,workspace_id,vendor_ref,legal_name,tax_id,status,created_at,updated_at")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: true });
+
+    if (error || !data) return [];
+
+    return data.map((row) => ({
+      id: row.id,
+      workspaceId: row.workspace_id,
+      vendorRef: row.vendor_ref,
+      legalName: row.legal_name,
+      taxId: row.tax_id,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  async createWorkspaceVendor(input: {
+    workspaceId: string;
+    vendorRef: string;
+    legalName: string;
+    taxId?: string | null;
+  }): Promise<WorkspaceVendor> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      const row: WorkspaceVendor = {
+        id: crypto.randomUUID(),
+        workspaceId: input.workspaceId,
+        vendorRef: input.vendorRef,
+        legalName: input.legalName,
+        taxId: input.taxId ?? null,
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      state.vendors.push(row);
+      writeLocalState(state);
+      return row;
+    }
+
+    const { data, error } = await supabase
+      .from("workspace_vendors")
+      .insert({
+        workspace_id: input.workspaceId,
+        vendor_ref: input.vendorRef,
+        legal_name: input.legalName,
+        tax_id: input.taxId ?? null,
+      })
+      .select("id,workspace_id,vendor_ref,legal_name,tax_id,status,created_at,updated_at")
+      .single();
+
+    if (error || !data) {
+      throw new Error(`Failed to create workspace vendor: ${error?.message ?? "unknown error"}`);
+    }
+
+    return {
+      id: data.id,
+      workspaceId: data.workspace_id,
+      vendorRef: data.vendor_ref,
+      legalName: data.legal_name,
+      taxId: data.tax_id,
+      status: data.status,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  async listBuyerLedgerLinks(workspaceId: string): Promise<WorkspaceBuyerLedgerLink[]> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      return state.buyerLedgerLinks.filter((link) => link.workspaceId === workspaceId);
+    }
+
+    const { data, error } = await supabase
+      .from("workspace_buyer_ledger_links")
+      .select("id,workspace_id,ledger_pda,ledger_code,authority_pubkey,accounting_ledger_key,status,created_at")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: true });
+
+    if (error || !data) return [];
+
+    return data.map((row) => ({
+      id: row.id,
+      workspaceId: row.workspace_id,
+      ledgerPda: row.ledger_pda,
+      ledgerCode: row.ledger_code,
+      authorityPubkey: row.authority_pubkey,
+      accountingLedgerKey: row.accounting_ledger_key,
+      status: row.status,
+      createdAt: row.created_at,
+    }));
+  }
+
+  async upsertBuyerLedgerLink(input: {
+    workspaceId: string;
+    ledgerPda: string;
+    ledgerCode: string;
+    authorityPubkey: string;
+    accountingLedgerKey?: string | null;
+  }): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      const existingIndex = state.buyerLedgerLinks.findIndex(
+        (link) => link.workspaceId === input.workspaceId && link.ledgerPda === input.ledgerPda,
+      );
+      const row: WorkspaceBuyerLedgerLink = {
+        id: existingIndex >= 0 ? state.buyerLedgerLinks[existingIndex].id : crypto.randomUUID(),
+        workspaceId: input.workspaceId,
+        ledgerPda: input.ledgerPda,
+        ledgerCode: input.ledgerCode,
+        authorityPubkey: input.authorityPubkey,
+        accountingLedgerKey: input.accountingLedgerKey ?? null,
+        status: "active",
+        createdAt:
+          existingIndex >= 0
+            ? state.buyerLedgerLinks[existingIndex].createdAt
+            : new Date().toISOString(),
+      };
+      if (existingIndex >= 0) state.buyerLedgerLinks[existingIndex] = row;
+      else state.buyerLedgerLinks.push(row);
+      writeLocalState(state);
+      return;
+    }
+
+    const { error } = await supabase.from("workspace_buyer_ledger_links").upsert(
+      {
+        workspace_id: input.workspaceId,
+        ledger_pda: input.ledgerPda,
+        ledger_code: input.ledgerCode,
+        authority_pubkey: input.authorityPubkey,
+        accounting_ledger_key: input.accountingLedgerKey ?? null,
+      },
+      { onConflict: "workspace_id,ledger_pda" },
+    );
+
+    if (error) {
+      throw new Error(`Failed to upsert buyer ledger link: ${error.message}`);
+    }
+  }
+
+  async listWorkspaceVendorLedgerLinks(input: {
+    workspaceId: string;
+    ledgerPda?: string;
+  }): Promise<WorkspaceVendorLedgerLink[]> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      return state.vendorLedgerLinks.filter(
+        (link) => link.workspaceId === input.workspaceId && (!input.ledgerPda || link.ledgerPda === input.ledgerPda),
+      );
+    }
+
+    let query = supabase
+      .from("workspace_vendor_ledger_links")
+      .select("id,workspace_id,workspace_vendor_id,ledger_pda,onchain_vendor_pubkey,vendor_code,status,created_at,updated_at")
+      .eq("workspace_id", input.workspaceId)
+      .order("created_at", { ascending: true });
+
+    if (input.ledgerPda) query = query.eq("ledger_pda", input.ledgerPda);
+
+    const { data, error } = await query;
+
+    if (error || !data) return [];
+
+    return data.map((row) => ({
+      id: row.id,
+      workspaceId: row.workspace_id,
+      workspaceVendorId: row.workspace_vendor_id,
+      ledgerPda: row.ledger_pda,
+      onchainVendorPubkey: row.onchain_vendor_pubkey,
+      vendorCode: row.vendor_code,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  async upsertWorkspaceVendorLedgerLink(input: {
+    workspaceId: string;
+    workspaceVendorId: string;
+    ledgerPda: string;
+    onchainVendorPubkey: string;
+    vendorCode: string;
+  }): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      const existingIndex = state.vendorLedgerLinks.findIndex(
+        (link) =>
+          link.workspaceId === input.workspaceId &&
+          link.workspaceVendorId === input.workspaceVendorId &&
+          link.ledgerPda === input.ledgerPda,
+      );
+      const row: WorkspaceVendorLedgerLink = {
+        id: existingIndex >= 0 ? state.vendorLedgerLinks[existingIndex].id : crypto.randomUUID(),
+        workspaceId: input.workspaceId,
+        workspaceVendorId: input.workspaceVendorId,
+        ledgerPda: input.ledgerPda,
+        onchainVendorPubkey: input.onchainVendorPubkey,
+        vendorCode: input.vendorCode,
+        status: "active",
+        createdAt:
+          existingIndex >= 0
+            ? state.vendorLedgerLinks[existingIndex].createdAt
+            : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      if (existingIndex >= 0) state.vendorLedgerLinks[existingIndex] = row;
+      else state.vendorLedgerLinks.push(row);
+      writeLocalState(state);
+      return;
+    }
+
+    const { error } = await supabase.from("workspace_vendor_ledger_links").upsert(
+      {
+        workspace_id: input.workspaceId,
+        workspace_vendor_id: input.workspaceVendorId,
+        ledger_pda: input.ledgerPda,
+        onchain_vendor_pubkey: input.onchainVendorPubkey,
+        vendor_code: input.vendorCode,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "workspace_id,ledger_pda,workspace_vendor_id" },
+    );
+
+    if (error) {
+      throw new Error(`Failed to upsert vendor ledger link: ${error.message}`);
+    }
   }
 }
 
