@@ -22,6 +22,7 @@ import {
   workspaceCustomerCodeSchema,
 } from "@/lib/validation/schemas";
 import type {
+  LedgerRecord,
   WorkspaceCustomer,
   WorkspaceCustomerCodeRegistryEntry,
   WorkspaceCustomerLedgerLink,
@@ -42,6 +43,7 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<WorkspaceCustomer[]>([]);
   const [codeRegistry, setCodeRegistry] = useState<WorkspaceCustomerCodeRegistryEntry[]>([]);
   const [customerLedgerLinks, setCustomerLedgerLinks] = useState<WorkspaceCustomerLedgerLink[]>([]);
+  const [supplierLedgers, setSupplierLedgers] = useState<LedgerRecord[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
@@ -67,26 +69,29 @@ export default function CustomersPage() {
       setCustomers([]);
       setCodeRegistry([]);
       setCustomerLedgerLinks([]);
+      setSupplierLedgers([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    const [nextCustomers, nextRegistry, nextLinks] = await Promise.all([
+    const [nextCustomers, nextRegistry, nextLinks, nextSupplierLedgers] = await Promise.all([
       controlPlaneService.listWorkspaceCustomers(activeWorkspaceId),
       controlPlaneService.listWorkspaceCustomerCodeRegistry(activeWorkspaceId),
       controlPlaneService.listWorkspaceCustomerLedgerLinks({ workspaceId: activeWorkspaceId }),
+      arService ? arService.listLedgers() : Promise.resolve([]),
     ]);
     setCustomers(nextCustomers);
     setCodeRegistry(nextRegistry);
     setCustomerLedgerLinks(nextLinks);
+    setSupplierLedgers(nextSupplierLedgers);
     setLoading(false);
   };
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, arService]);
 
   const filteredCustomers = useMemo(() => {
     return customers.filter((row) => {
@@ -158,12 +163,22 @@ export default function CustomersPage() {
     setFormOnchainCustomerPubkey(preferredLink?.onchainCustomerPubkey ?? "");
   }, [selectedCustomer, codeRegistry, customerLedgerLinks]);
 
+  const supplierLedgerPdas = useMemo(
+    () => new Set(supplierLedgers.map((ledger) => ledger.pubkey)),
+    [supplierLedgers],
+  );
+
   const ledgerOptions = useMemo(
     () =>
       ledgerLinks
-        .filter((row) => row.status === "active")
+        .filter(
+          (row) =>
+            row.workspaceId === activeWorkspaceId &&
+            row.status === "active" &&
+            supplierLedgerPdas.has(row.ledgerPda),
+        )
         .map((row) => ({ value: row.ledgerPda, label: `${row.ledgerCode} (${row.ledgerPda.slice(0, 8)}...)` })),
-    [ledgerLinks],
+    [activeWorkspaceId, ledgerLinks, supplierLedgerPdas],
   );
 
   const selectedLinkForForm = useMemo(() => {
@@ -224,7 +239,7 @@ export default function CustomersPage() {
     const customerCode = formCode.trim().toUpperCase();
 
     const nextErrors: Record<string, string> = {};
-    if (!ledgerPda) nextErrors.ledgerPda = "Select a ledger before initializing on-chain customer.";
+    if (!ledgerPda) nextErrors.ledgerPda = "Select a Supplier ledger before initializing on-chain customer.";
     if (!customerCode) nextErrors.customerCode = "Customer code is required to initialize on-chain customer.";
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -533,7 +548,7 @@ export default function CustomersPage() {
                     nextErrors.customerCode = "Customer code is required when linking a ledger.";
                   }
                   if (!targetLedgerPda) {
-                    nextErrors.ledgerPda = "Select a ledger to create a link.";
+                    nextErrors.ledgerPda = "Select a Supplier ledger to create a link.";
                   }
                   if (!resolvedOnchainCustomerPubkey) {
                     nextErrors.onchainCustomerPubkey =
@@ -610,6 +625,9 @@ export default function CustomersPage() {
               error={errors.legalName}
               disabled={!canWriteTransactions || !activeWorkspaceId}
             />
+            <p className="-mt-2 text-[10px] text-slate-500">
+              Required only when creating a new recipient. Existing invoice customers already provide this value.
+            </p>
             <Input
               label="Tax ID (optional)"
               value={formTaxId}
@@ -639,10 +657,10 @@ export default function CustomersPage() {
             />
 
             <Select
-              label="Link Ledger (optional)"
+              label="Link Supplier Ledger (optional)"
               value={formLedgerPda}
               onChange={(event) => setFormLedgerPda(event.target.value)}
-              options={[{ value: "", label: "Select ledger" }, ...ledgerOptions]}
+              options={[{ value: "", label: "Select Supplier ledger" }, ...ledgerOptions]}
               disabled={!canWriteTransactions || !activeWorkspaceId}
               error={errors.ledgerPda}
             />

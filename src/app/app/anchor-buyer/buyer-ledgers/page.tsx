@@ -5,12 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
+import { useWorkspace } from "@/context/workspace-context";
 import type { BuyerLedgerRecord } from "@/lib/types/domain";
 import { accountingEngineService, type AccountingLedger } from "@/services/accounting-engine-service";
 import { createApSubledgerService } from "@/services/ap-subledger-service";
+import { filterBuyerLedgersByWorkspaceLinks } from "@/services/buyer-ledger-workspace";
+import { controlPlaneService } from "@/services/control-plane-service";
 
 export default function BuyerLedgersPage() {
   const { wallet } = useEmbeddedWallet();
+  const { selectedWorkspaceId, workspaces } = useWorkspace();
   const service = useMemo(() => (wallet ? createApSubledgerService(wallet) : null), [wallet]);
   const [rows, setRows] = useState<BuyerLedgerRecord[]>([]);
   const [accountingLedgers, setAccountingLedgers] = useState<AccountingLedger[]>([]);
@@ -21,14 +25,34 @@ export default function BuyerLedgersPage() {
   const [cashAccountCode, setCashAccountCode] = useState("1000");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const activeWorkspaceId = selectedWorkspaceId ?? workspaces[0]?.id ?? null;
 
   useEffect(() => {
-    if (!service) {
-      setRows([]);
+    setRows([]);
+
+    if (!service || !activeWorkspaceId) {
       return;
     }
-    void service.listBuyerLedgers().then(setRows).catch((error) => setMessage(String(error)));
-  }, [service]);
+
+    let cancelled = false;
+    void Promise.all([
+      service.listBuyerLedgers(),
+      controlPlaneService.listBuyerLedgerLinks(activeWorkspaceId),
+      controlPlaneService.listLedgerLinks(activeWorkspaceId),
+    ])
+      .then(([ledgers, links, workspaceLedgerLinks]) => {
+        if (!cancelled) {
+          setRows(filterBuyerLedgersByWorkspaceLinks(ledgers, links, workspaceLedgerLinks));
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) setMessage(String(error));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId, service]);
 
   useEffect(() => {
     if (!wallet) {
@@ -57,10 +81,13 @@ export default function BuyerLedgersPage() {
   }, [wallet]);
 
   async function handleCreate() {
-    if (!service) return;
+    if (!service || !wallet) return;
     setBusy(true);
     setMessage(null);
     try {
+      if (!activeWorkspaceId) {
+        throw new Error("Select a workspace before creating a Buyer Ledger.");
+      }
       const pubkey = await service.initializeBuyerLedger({
         ledgerCode,
         accountingLedgerPubkey,
@@ -68,8 +95,18 @@ export default function BuyerLedgersPage() {
         purchaseAccountCode: Number(purchaseAccountCode),
         cashAccountCode: Number(cashAccountCode),
       });
+      await controlPlaneService.upsertBuyerLedgerLink({
+        workspaceId: activeWorkspaceId,
+        ledgerPda: pubkey,
+        ledgerCode,
+        authorityPubkey: wallet.publicKey.toBase58(),
+        accountingLedgerKey: accountingLedgerPubkey,
+      });
       setMessage(`Created buyer ledger ${pubkey}`);
-      setRows(await service.listBuyerLedgers());
+      const createdLedger = await service.getBuyerLedger(pubkey);
+      if (createdLedger) {
+        setRows((current) => [...current.filter((row) => row.pubkey !== pubkey), createdLedger]);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {

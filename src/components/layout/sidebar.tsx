@@ -16,11 +16,12 @@ const navSections = [
   {
     title: "Anchor Buyer",
     links: [
-      { href: "/app/anchor-buyer", label: "Buyer Home" },
+      { href: "/app/anchor-buyer/workflow", label: "Buyer Home" },
       { href: "/app/anchor-buyer/buyer-ledgers", label: "Buyer Ledgers" },
       { href: "/app/anchor-buyer/vendors", label: "Vendors" },
       { href: "/app/anchor-buyer/vendor-invoices", label: "Vendor Invoices" },
       { href: "/app/anchor-buyer/payments", label: "Vendor Payments" },
+      { href: "/app/anchor-buyer/facilitator-authorizations", label: "Facilitator Access" },
       { href: "/app/anchor-buyer/workflow", label: "Buyer Workflow" },
     ],
   },
@@ -32,7 +33,17 @@ const navSections = [
       { href: "/app/vendor-supplier/customers", label: "Customers" },
       { href: "/app/vendor-supplier/invoices", label: "Customer Invoices" },
       { href: "/app/vendor-supplier/settlements", label: "Settlements" },
+      { href: "/app/vendor-supplier/facilitator-authorizations", label: "Facilitator Access" },
       { href: "/app/vendor-supplier/timeline", label: "Activity" },
+    ],
+  },
+  {
+    title: "Facilitator",
+    links: [
+      { href: "/app/facilitator/settlements", label: "Settlements" },
+      { href: "/app/facilitator/settlements/routes", label: "Routes" },
+      { href: "/app/facilitator/settlements/documents", label: "Documents" },
+      { href: "/app/facilitator/settlements/executions", label: "Executions" },
     ],
   },
   {
@@ -81,8 +92,7 @@ export function Sidebar() {
               const isBaseGlRoute =
                 pathname === "/app/accounting" ||
                 pathname.startsWith("/app/accounting/") ||
-                /^\/app\/vendor-supplier\/ledgers\/[^/]+\/accounting(?:\/.*)?$/.test(pathname) ||
-                /^\/app\/ledgers\/[^/]+\/accounting(?:\/.*)?$/.test(pathname);
+                /^\/app\/vendor-supplier\/ledgers\/[^/]+\/accounting(?:\/.*)?$/.test(pathname);
 
               // Ledgers should NOT be highlighted on Base GL - Accounting Management pages
               const isLedgerRoute = item.href === "/app/vendor-supplier/ledgers";

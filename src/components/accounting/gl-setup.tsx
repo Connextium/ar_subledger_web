@@ -77,6 +77,8 @@ const AP_GL_ACCOUNTS: GLAccountSpec[] = [
 interface Props {
   ledgerKey: string;
   generalLedgerId: string;
+  defaultInitializationType?: "ar" | "ap";
+  allowedInitializationTypes?: Array<"ar" | "ap">;
 }
 
 function getCanonicalGlAccountName(code: number, currentName: string): string {
@@ -85,7 +87,12 @@ function getCanonicalGlAccountName(code: number, currentName: string): string {
   return currentName;
 }
 
-export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) {
+export default function GlSetupComponent({
+  ledgerKey,
+  generalLedgerId,
+  defaultInitializationType = "ar",
+  allowedInitializationTypes = ["ar", "ap"],
+}: Props) {
   const params = useParams();
   const { selectedWorkspaceId } = useWorkspace();
   // Prefer prop, fallback to route param
@@ -96,7 +103,9 @@ export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [initializationType, setInitializationType] = useState<"ar" | "ap">("ar");
+  const [initializationType, setInitializationType] = useState<"ar" | "ap">(defaultInitializationType);
+  const canUseAr = allowedInitializationTypes.includes("ar");
+  const canUseAp = allowedInitializationTypes.includes("ap");
 
   const getAccountsToInitialize = () =>
     initializationType === "ar" ? AR_GL_ACCOUNTS : AP_GL_ACCOUNTS;
@@ -106,9 +115,19 @@ export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) 
   const missingApCodes = AP_GL_ACCOUNTS.filter((account) => !existingCodes.has(account.code));
   const hasArAccounts = missingArCodes.length === 0;
   const hasApAccounts = missingApCodes.length === 0;
-  const canInitializeAr = missingArCodes.length > 0;
-  const canInitializeAp = missingApCodes.length > 0;
-  const isFullyInitialized = hasArAccounts && hasApAccounts;
+  const canInitializeAr = canUseAr && missingArCodes.length > 0;
+  const canInitializeAp = canUseAp && missingApCodes.length > 0;
+  const isFullyInitialized =
+    (!canUseAr || hasArAccounts) &&
+    (!canUseAp || hasApAccounts);
+
+  useEffect(() => {
+    if (initializationType === "ar" && !canUseAr && canUseAp) {
+      setInitializationType("ap");
+    } else if (initializationType === "ap" && !canUseAp && canUseAr) {
+      setInitializationType("ar");
+    }
+  }, [canUseAp, canUseAr, initializationType]);
 
   // Load existing GL accounts
   const loadGlAccounts = useCallback(async () => {
@@ -156,6 +175,7 @@ export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) 
         body: JSON.stringify({
           generalLedgerId: effectiveGeneralLedgerId,
           workspaceId: selectedWorkspaceId,
+          ledgerKey,
           initializationType,
         }),
       });
@@ -239,25 +259,25 @@ export default function GlSetupComponent({ ledgerKey, generalLedgerId }: Props) 
               <div className="flex gap-2 rounded-lg border border-gray-300 bg-gray-50 p-1">
                 <button
                   onClick={() => setInitializationType("ar")}
-                  disabled={!canInitializeAr}
+                  disabled={!canUseAr || !canInitializeAr}
                   className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
                     initializationType === "ar"
                       ? "bg-blue-600 text-white"
                       : "text-gray-700 hover:bg-gray-200 disabled:text-gray-400"
                   }`}
                 >
-                  {canInitializeAr ? `Initialize AR (${missingArCodes.length})` : "AR ✓"}
+                  {!canUseAr ? "AR unavailable" : canInitializeAr ? `Initialize AR (${missingArCodes.length})` : "AR ✓"}
                 </button>
                 <button
                   onClick={() => setInitializationType("ap")}
-                  disabled={!canInitializeAp}
+                  disabled={!canUseAp || !canInitializeAp}
                   className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
                     initializationType === "ap"
                       ? "bg-blue-600 text-white"
                       : "text-gray-700 hover:bg-gray-200 disabled:text-gray-400"
                   }`}
                 >
-                  {canInitializeAp ? `Initialize AP (${missingApCodes.length})` : "AP ✓"}
+                  {!canUseAp ? "AP unavailable" : canInitializeAp ? `Initialize AP (${missingApCodes.length})` : "AP ✓"}
                 </button>
               </div>
               <Button

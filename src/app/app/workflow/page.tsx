@@ -1,5 +1,0 @@
-import { redirect } from "next/navigation";
-
-export default function LegacyWorkflowPage() {
-  redirect("/app/vendor-supplier/workflow");
-}

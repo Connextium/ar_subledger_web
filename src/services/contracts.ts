@@ -10,6 +10,9 @@ import type {
   VendorInvoiceRecord,
   VendorPaymentRecord,
   VendorRecord,
+  SettlementDocumentRecord,
+  SettlementExecutionRecord,
+  SettlementRouteRecord,
 } from "@/lib/types/domain";
 
 export type TransactionSubmissionHooks = {
@@ -124,6 +127,33 @@ export type PayVendorInvoiceInput = TransactionSubmissionHooks & {
   paymentReference: string;
 };
 
+export type InitializeSettlementRouteInput = TransactionSubmissionHooks & {
+  routeCode: string;
+  buyerApLedgerPubkey: string;
+  supplierArLedgerPubkey: string;
+};
+
+export type RegisterSettlementDocumentInput = TransactionSubmissionHooks & {
+  routePubkey: string;
+  invoiceNo: string;
+  documentHash: string;
+  currency: string;
+  originalAmount: number;
+};
+
+export type CancelSettlementDocumentInput = TransactionSubmissionHooks & {
+  routePubkey: string;
+  documentPubkey: string;
+};
+
+export type ExecuteSettlementInput = TransactionSubmissionHooks & {
+  routePubkey: string;
+  documentPubkey: string;
+  settlementSeq: number;
+  amountMinor: number;
+  memo: string;
+};
+
 export interface LedgerService {
   initializeLedger(input: InitializeLedgerInput): Promise<string>;
   listLedgers(): Promise<LedgerRecord[]>;
@@ -161,6 +191,20 @@ export interface ApSubledgerService {
   payVendorInvoice(input: PayVendorInvoiceInput): Promise<string>;
   listBuyerLedgers(): Promise<BuyerLedgerRecord[]>;
   listVendors(ledgerPubkey?: string): Promise<VendorRecord[]>;
+  getVendorInvoice(pubkey: string): Promise<VendorInvoiceRecord | null>;
   listVendorInvoices(ledgerPubkey?: string): Promise<VendorInvoiceRecord[]>;
   listVendorPayments(invoicePubkey?: string): Promise<VendorPaymentRecord[]>;
+}
+
+export interface SettlementFacilitatorService {
+  initializeRoute(input: InitializeSettlementRouteInput): Promise<string>;
+  getRoute(pubkey: string): Promise<SettlementRouteRecord | null>;
+  registerDocument(input: RegisterSettlementDocumentInput): Promise<string>;
+  getDocument(pubkey: string): Promise<SettlementDocumentRecord | null>;
+  cancelDocument(input: CancelSettlementDocumentInput): Promise<string>;
+  executeSettlement(input: ExecuteSettlementInput): Promise<string>;
+  listRoutes(): Promise<SettlementRouteRecord[]>;
+  listDocuments(routePubkey?: string): Promise<SettlementDocumentRecord[]>;
+  getExecution(pubkey: string): Promise<SettlementExecutionRecord | null>;
+  listExecutions(documentPubkey?: string): Promise<SettlementExecutionRecord[]>;
 }

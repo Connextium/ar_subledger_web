@@ -12,6 +12,9 @@ import type {
   WorkspaceMember,
   WorkspaceVendor,
   WorkspaceVendorLedgerLink,
+  WorkspaceSettlementDocument,
+  WorkspaceSettlementExecution,
+  WorkspaceSettlementRoute,
 } from "@/lib/types/domain";
 import { env } from "@/lib/config/env";
 
@@ -27,6 +30,9 @@ type LocalControlPlane = {
   vendors: WorkspaceVendor[];
   buyerLedgerLinks: WorkspaceBuyerLedgerLink[];
   vendorLedgerLinks: WorkspaceVendorLedgerLink[];
+  settlementRoutes: WorkspaceSettlementRoute[];
+  settlementDocuments: WorkspaceSettlementDocument[];
+  settlementExecutions: WorkspaceSettlementExecution[];
 };
 
 function emptyLocalState(): LocalControlPlane {
@@ -40,6 +46,9 @@ function emptyLocalState(): LocalControlPlane {
     vendors: [],
     buyerLedgerLinks: [],
     vendorLedgerLinks: [],
+    settlementRoutes: [],
+    settlementDocuments: [],
+    settlementExecutions: [],
   };
 }
 
@@ -65,6 +74,9 @@ function readLocalState(): LocalControlPlane {
       vendors: parsed.vendors ?? [],
       buyerLedgerLinks: parsed.buyerLedgerLinks ?? [],
       vendorLedgerLinks: parsed.vendorLedgerLinks ?? [],
+      settlementRoutes: parsed.settlementRoutes ?? [],
+      settlementDocuments: parsed.settlementDocuments ?? [],
+      settlementExecutions: parsed.settlementExecutions ?? [],
     };
   } catch (e) {
     // Debug log for persistent corruption
@@ -818,6 +830,65 @@ export class ControlPlaneService {
     };
   }
 
+  async updateWorkspaceVendor(input: {
+    workspaceId: string;
+    vendorId: string;
+    vendorRef: string;
+    legalName: string;
+    taxId?: string | null;
+    status: WorkspaceVendor["status"];
+  }): Promise<WorkspaceVendor> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      const index = state.vendors.findIndex(
+        (vendor) => vendor.workspaceId === input.workspaceId && vendor.id === input.vendorId,
+      );
+      if (index < 0) {
+        throw new Error("Workspace vendor not found");
+      }
+      const updated: WorkspaceVendor = {
+        ...state.vendors[index],
+        vendorRef: input.vendorRef,
+        legalName: input.legalName,
+        taxId: input.taxId ?? null,
+        status: input.status,
+        updatedAt: new Date().toISOString(),
+      };
+      state.vendors[index] = updated;
+      writeLocalState(state);
+      return updated;
+    }
+
+    const { data, error } = await supabase
+      .from("workspace_vendors")
+      .update({
+        vendor_ref: input.vendorRef,
+        legal_name: input.legalName,
+        tax_id: input.taxId ?? null,
+        status: input.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.vendorId)
+      .eq("workspace_id", input.workspaceId)
+      .select("id,workspace_id,vendor_ref,legal_name,tax_id,status,created_at,updated_at")
+      .single();
+
+    if (error || !data) {
+      throw new Error(`Failed to update workspace vendor: ${error?.message ?? "unknown error"}`);
+    }
+
+    return {
+      id: data.id,
+      workspaceId: data.workspace_id,
+      vendorRef: data.vendor_ref,
+      legalName: data.legal_name,
+      taxId: data.tax_id,
+      status: data.status,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
   async listBuyerLedgerLinks(workspaceId: string): Promise<WorkspaceBuyerLedgerLink[]> {
     if (!isSupabaseConfigured()) {
       const state = readLocalState();
@@ -976,6 +1047,233 @@ export class ControlPlaneService {
 
     if (error) {
       throw new Error(`Failed to upsert vendor ledger link: ${error.message}`);
+    }
+  }
+
+  async listWorkspaceSettlementRoutes(workspaceId: string): Promise<WorkspaceSettlementRoute[]> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      return state.settlementRoutes.filter((route) => route.workspaceId === workspaceId);
+    }
+
+    const { data, error } = await supabase
+      .from("workspace_settlement_routes")
+      .select("id,workspace_id,route_pda,route_code,facilitator_pubkey,buyer_accounting_ledger,supplier_accounting_ledger,status,created_at,updated_at")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: true });
+
+    if (error || !data) return [];
+
+    return data.map((row) => ({
+      id: row.id,
+      workspaceId: row.workspace_id,
+      routePda: row.route_pda,
+      routeCode: row.route_code,
+      facilitatorPubkey: row.facilitator_pubkey,
+      buyerAccountingLedger: row.buyer_accounting_ledger,
+      supplierAccountingLedger: row.supplier_accounting_ledger,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  async upsertWorkspaceSettlementRoute(input: {
+    workspaceId: string;
+    routePda: string;
+    routeCode: string;
+    facilitatorPubkey: string;
+    buyerAccountingLedger: string;
+    supplierAccountingLedger: string;
+  }): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      const existingIndex = state.settlementRoutes.findIndex(
+        (route) => route.workspaceId === input.workspaceId && route.routePda === input.routePda,
+      );
+      const row: WorkspaceSettlementRoute = {
+        id: existingIndex >= 0 ? state.settlementRoutes[existingIndex].id : crypto.randomUUID(),
+        workspaceId: input.workspaceId,
+        routePda: input.routePda,
+        routeCode: input.routeCode,
+        facilitatorPubkey: input.facilitatorPubkey,
+        buyerAccountingLedger: input.buyerAccountingLedger,
+        supplierAccountingLedger: input.supplierAccountingLedger,
+        status: "active",
+        createdAt:
+          existingIndex >= 0
+            ? state.settlementRoutes[existingIndex].createdAt
+            : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      if (existingIndex >= 0) state.settlementRoutes[existingIndex] = row;
+      else state.settlementRoutes.push(row);
+      writeLocalState(state);
+      return;
+    }
+
+    const { error } = await supabase.from("workspace_settlement_routes").upsert(
+      {
+        workspace_id: input.workspaceId,
+        route_pda: input.routePda,
+        route_code: input.routeCode,
+        facilitator_pubkey: input.facilitatorPubkey,
+        buyer_accounting_ledger: input.buyerAccountingLedger,
+        supplier_accounting_ledger: input.supplierAccountingLedger,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "workspace_id,route_pda" },
+    );
+
+    if (error) {
+      throw new Error(`Failed to upsert settlement route: ${error.message}`);
+    }
+  }
+
+  async listWorkspaceSettlementDocuments(workspaceId: string): Promise<WorkspaceSettlementDocument[]> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      return state.settlementDocuments.filter((document) => document.workspaceId === workspaceId);
+    }
+
+    const { data, error } = await supabase
+      .from("workspace_settlement_documents")
+      .select("id,workspace_id,route_pda,document_pda,invoice_no,document_hash,status,created_at,updated_at")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: true });
+
+    if (error || !data) return [];
+
+    return data.map((row) => ({
+      id: row.id,
+      workspaceId: row.workspace_id,
+      routePda: row.route_pda,
+      documentPda: row.document_pda,
+      invoiceNo: row.invoice_no,
+      documentHash: row.document_hash,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  async upsertWorkspaceSettlementDocument(input: {
+    workspaceId: string;
+    routePda: string;
+    documentPda: string;
+    invoiceNo: string;
+    documentHash: string;
+  }): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      const existingIndex = state.settlementDocuments.findIndex(
+        (document) => document.workspaceId === input.workspaceId && document.documentPda === input.documentPda,
+      );
+      const row: WorkspaceSettlementDocument = {
+        id: existingIndex >= 0 ? state.settlementDocuments[existingIndex].id : crypto.randomUUID(),
+        workspaceId: input.workspaceId,
+        routePda: input.routePda,
+        documentPda: input.documentPda,
+        invoiceNo: input.invoiceNo,
+        documentHash: input.documentHash,
+        status: "open",
+        createdAt:
+          existingIndex >= 0
+            ? state.settlementDocuments[existingIndex].createdAt
+            : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      if (existingIndex >= 0) state.settlementDocuments[existingIndex] = row;
+      else state.settlementDocuments.push(row);
+      writeLocalState(state);
+      return;
+    }
+
+    const { error } = await supabase.from("workspace_settlement_documents").upsert(
+      {
+        workspace_id: input.workspaceId,
+        route_pda: input.routePda,
+        document_pda: input.documentPda,
+        invoice_no: input.invoiceNo,
+        document_hash: input.documentHash,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "workspace_id,document_pda" },
+    );
+
+    if (error) {
+      throw new Error(`Failed to upsert settlement document: ${error.message}`);
+    }
+  }
+
+  async listWorkspaceSettlementExecutions(workspaceId: string): Promise<WorkspaceSettlementExecution[]> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      return state.settlementExecutions.filter((execution) => execution.workspaceId === workspaceId);
+    }
+
+    const { data, error } = await supabase
+      .from("workspace_settlement_executions")
+      .select("id,workspace_id,document_pda,execution_pda,settlement_seq,amount,created_at")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: true });
+
+    if (error || !data) return [];
+
+    return data.map((row) => ({
+      id: row.id,
+      workspaceId: row.workspace_id,
+      documentPda: row.document_pda,
+      executionPda: row.execution_pda,
+      settlementSeq: Number(row.settlement_seq),
+      amount: Number(row.amount),
+      createdAt: row.created_at,
+    }));
+  }
+
+  async upsertWorkspaceSettlementExecution(input: {
+    workspaceId: string;
+    documentPda: string;
+    executionPda: string;
+    settlementSeq: number;
+    amount: number;
+  }): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      const state = readLocalState();
+      const existingIndex = state.settlementExecutions.findIndex(
+        (execution) => execution.workspaceId === input.workspaceId && execution.executionPda === input.executionPda,
+      );
+      const row: WorkspaceSettlementExecution = {
+        id: existingIndex >= 0 ? state.settlementExecutions[existingIndex].id : crypto.randomUUID(),
+        workspaceId: input.workspaceId,
+        documentPda: input.documentPda,
+        executionPda: input.executionPda,
+        settlementSeq: input.settlementSeq,
+        amount: input.amount,
+        createdAt:
+          existingIndex >= 0
+            ? state.settlementExecutions[existingIndex].createdAt
+            : new Date().toISOString(),
+      };
+      if (existingIndex >= 0) state.settlementExecutions[existingIndex] = row;
+      else state.settlementExecutions.push(row);
+      writeLocalState(state);
+      return;
+    }
+
+    const { error } = await supabase.from("workspace_settlement_executions").upsert(
+      {
+        workspace_id: input.workspaceId,
+        document_pda: input.documentPda,
+        execution_pda: input.executionPda,
+        settlement_seq: input.settlementSeq,
+        amount: input.amount,
+      },
+      { onConflict: "workspace_id,execution_pda" },
+    );
+
+    if (error) {
+      throw new Error(`Failed to upsert settlement execution: ${error.message}`);
     }
   }
 }

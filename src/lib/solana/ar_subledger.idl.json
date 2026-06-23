@@ -877,6 +877,19 @@
       ]
     },
     {
+      "name": "GlConfig",
+      "discriminator": [
+        60,
+        236,
+        36,
+        123,
+        19,
+        110,
+        126,
+        128
+      ]
+    },
+    {
       "name": "Invoice",
       "discriminator": [
         51,
@@ -1446,6 +1459,30 @@
           {
             "name": "balance",
             "type": "i128"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "ledger_code",
+            "type": "string"
+          },
+          {
+            "name": "journal_entry_count",
+            "type": "u64"
           },
           {
             "name": "bump",

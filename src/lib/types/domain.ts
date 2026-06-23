@@ -136,6 +136,47 @@ export type VendorPaymentRecord = {
   journalEntryId: number;
 };
 
+export type SettlementRouteRecord = {
+  pubkey: string;
+  facilitator: string;
+  buyerAuthority: string;
+  supplierAuthority: string;
+  buyerApLedger: string;
+  supplierArLedger: string;
+  buyerAccountingLedger: string;
+  supplierAccountingLedger: string;
+  routeCode: string;
+  documentCount: number;
+  nextSettlementSeq: number;
+  active: boolean;
+};
+
+export type SettlementDocumentRecord = {
+  pubkey: string;
+  route: string;
+  invoiceNo: string;
+  documentHash: string;
+  currency: string;
+  originalAmount: number;
+  openAmount: number;
+  settledAmount: number;
+  status: number;
+};
+
+export type SettlementExecutionRecord = {
+  pubkey: string;
+  route: string;
+  document: string;
+  settlementSeq: number;
+  amount: number;
+  buyerJournalEntryId: number;
+  supplierJournalEntryId: number;
+  buyerJournalEntry: string;
+  supplierJournalEntry: string;
+  memo: string;
+  executedAt: number;
+};
+
 export type ActivityItem = {
   id: string;
   type:
@@ -251,6 +292,41 @@ export type WorkspaceVendorLedgerLink = {
   status: "active" | "inactive";
   createdAt: string;
   updatedAt: string;
+};
+
+export type WorkspaceSettlementRoute = {
+  id: string;
+  workspaceId: string;
+  routePda: string;
+  routeCode: string;
+  facilitatorPubkey: string;
+  buyerAccountingLedger: string;
+  supplierAccountingLedger: string;
+  status: "active" | "inactive";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkspaceSettlementDocument = {
+  id: string;
+  workspaceId: string;
+  routePda: string;
+  documentPda: string;
+  invoiceNo: string;
+  documentHash: string;
+  status: "open" | "partially_settled" | "settled" | "cancelled";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkspaceSettlementExecution = {
+  id: string;
+  workspaceId: string;
+  documentPda: string;
+  executionPda: string;
+  settlementSeq: number;
+  amount: number;
+  createdAt: string;
 };
 
 export const INVOICE_STATUS_LABEL: Record<number, string> = {

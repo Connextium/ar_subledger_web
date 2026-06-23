@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "set -e; for file in $(find tests -type f -name '*.test.ts' | sort); do npx --yes tsx \"$file\"; done",
     "lint": "eslint"
   },
   "dependencies": {

@@ -22,6 +22,7 @@ import { Connection, PublicKey, Keypair, SendTransactionError, Transaction, Syst
 import bs58 from "bs58";
 import accountingEngineIdl from "@/lib/idl/accounting_engine.json";
 import { env } from "@/lib/config/env";
+import { derivePostingDelegatePda } from "@/lib/solana/pdas";
 import type { EmbeddedWallet } from "@/lib/solana/embedded-wallet";
 
 export interface GlAccount {
@@ -75,6 +76,14 @@ export interface AccountingLedgerDiscoveryDebug {
   scannedAccounts: number;
   decodedLedgerConfigs: number;
   authorityMatches: number;
+}
+
+export interface PostingDelegateStatus {
+  postingDelegatePubkey: string;
+  ledger: string;
+  authority: string | null;
+  delegate: string;
+  active: boolean;
 }
 
 const ACCOUNTING_ENGINE_PROGRAM_ID = "93p9XxgYZJ6SwMskEASTmBPsGioB1RYbdGHqUKdDvm3q";
@@ -245,6 +254,76 @@ class AccountingEngineService {
     }
 
     return ledgerPda.toBase58();
+  }
+
+  async authorizePostingDelegate(
+    ledgerKey: PublicKey,
+    facilitator: PublicKey,
+    wallet: EmbeddedWallet,
+  ): Promise<string> {
+    const program = this.getWritableProgram(wallet);
+    const [postingDelegate] = derivePostingDelegatePda(ledgerKey, facilitator);
+
+    return program.methods
+      .authorizePostingDelegate(facilitator)
+      .accounts({
+        authority: wallet.publicKey,
+        ledger: ledgerKey,
+        postingDelegate,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+  }
+
+  async revokePostingDelegate(
+    ledgerKey: PublicKey,
+    facilitator: PublicKey,
+    wallet: EmbeddedWallet,
+  ): Promise<string> {
+    const program = this.getWritableProgram(wallet);
+    const [postingDelegate] = derivePostingDelegatePda(ledgerKey, facilitator);
+
+    return program.methods
+      .revokePostingDelegate()
+      .accounts({
+        authority: wallet.publicKey,
+        ledger: ledgerKey,
+        postingDelegate,
+      })
+      .rpc();
+  }
+
+  async getPostingDelegateStatus(
+    ledgerKey: PublicKey,
+    facilitator: PublicKey,
+  ): Promise<PostingDelegateStatus> {
+    const program = await this.getProgram();
+    const provider = getProvider() as AnchorProvider;
+    const [postingDelegate] = derivePostingDelegatePda(ledgerKey, facilitator);
+    const account = await provider.connection.getAccountInfo(postingDelegate, "confirmed");
+
+    if (!account) {
+      return {
+        postingDelegatePubkey: postingDelegate.toBase58(),
+        ledger: ledgerKey.toBase58(),
+        authority: null,
+        delegate: facilitator.toBase58(),
+        active: false,
+      };
+    }
+
+    const decoded = this.tryDecodePostingDelegate(program, account.data);
+    if (!decoded) {
+      throw new Error(`Posting delegate ${postingDelegate.toBase58()} could not be decoded.`);
+    }
+
+    return {
+      postingDelegatePubkey: postingDelegate.toBase58(),
+      ledger: decoded.ledger.toBase58(),
+      authority: decoded.authority.toBase58(),
+      delegate: decoded.delegate.toBase58(),
+      active: decoded.active,
+    };
   }
 
   /**
@@ -959,6 +1038,72 @@ class AccountingEngineService {
       const bump = data.readUInt8(offset);
 
       return { ledger, code, name, category, normalSide, balance, bump };
+    } catch {
+      return null;
+    }
+  }
+
+  private tryDecodePostingDelegate(
+    program: Program<Idl>,
+    data: Buffer,
+  ): {
+    ledger: PublicKey;
+    authority: PublicKey;
+    delegate: PublicKey;
+    active: boolean;
+    bump: number;
+  } | null {
+    try {
+      const decoded = program.coder.accounts.decode("PostingDelegate", data);
+      return {
+        ledger: decoded.ledger as PublicKey,
+        authority: decoded.authority as PublicKey,
+        delegate: decoded.delegate as PublicKey,
+        active: Boolean(decoded.active),
+        bump: decoded.bump as number,
+      };
+    } catch {
+      try {
+        const decoded = program.coder.accounts.decode("postingDelegate", data);
+        return {
+          ledger: decoded.ledger as PublicKey,
+          authority: decoded.authority as PublicKey,
+          delegate: decoded.delegate as PublicKey,
+          active: Boolean(decoded.active),
+          bump: decoded.bump as number,
+        };
+      } catch {
+        return this.tryDecodePostingDelegateManual(data);
+      }
+    }
+  }
+
+  private tryDecodePostingDelegateManual(data: Buffer): {
+    ledger: PublicKey;
+    authority: PublicKey;
+    delegate: PublicKey;
+    active: boolean;
+    bump: number;
+  } | null {
+    try {
+      let offset = 8;
+      if (data.length < offset + 32 + 32 + 32 + 1 + 1) return null;
+
+      const ledger = new PublicKey(data.subarray(offset, offset + 32));
+      offset += 32;
+
+      const authority = new PublicKey(data.subarray(offset, offset + 32));
+      offset += 32;
+
+      const delegate = new PublicKey(data.subarray(offset, offset + 32));
+      offset += 32;
+
+      const active = data.readUInt8(offset) !== 0;
+      offset += 1;
+
+      const bump = data.readUInt8(offset);
+
+      return { ledger, authority, delegate, active, bump };
     } catch {
       return null;
     }

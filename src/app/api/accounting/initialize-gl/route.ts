@@ -7,7 +7,7 @@ import { EmbeddedWallet } from "@/lib/solana/embedded-wallet";
 
 export async function POST(request: NextRequest) {
   try {
-    const { generalLedgerId, workspaceId, initializationType = "ar" } = await request.json();
+    const { generalLedgerId, workspaceId, ledgerKey, initializationType = "ar" } = await request.json();
 
     if (!generalLedgerId || !workspaceId) {
       return NextResponse.json({ error: "Missing generalLedgerId or workspaceId" }, { status: 400 });
@@ -47,24 +47,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Not a member of this workspace" }, { status: 403 });
     }
 
-    // Fetch ledger with authority pubkey
-    const { data: ledger, error: ledgerError } = await supabase
-      .from("ledgers")
-      .select("*")
-      .eq("id", generalLedgerId)
-      .eq("workspace_id", workspaceId)
-      .single();
-
-    if (ledgerError || !ledger) {
-      return NextResponse.json({ error: "Ledger not found" }, { status: 404 });
-    }
-
-    if (!ledger.authority_pubkey) {
-      return NextResponse.json(
-        { error: "Ledger authority pubkey not set" },
-        { status: 400 },
-      );
-    }
+    const isBuyerLedger = generalLedgerId.startsWith("buyer:");
+    const isBaseGlLedger = generalLedgerId.startsWith("base-gl:");
+    let targetLedgerKey = ledgerKey as string | undefined;
 
     // Use the main workspace wallet as authority for signing
     // 1. Find the main wallet for this workspace
@@ -83,9 +68,36 @@ export async function POST(request: NextRequest) {
     // 3. Create EmbeddedWallet from private key
     const authorityWallet = EmbeddedWallet.fromSecret(privateKey);
 
+    if (!isBuyerLedger && !isBaseGlLedger) {
+      // Fetch seller ledger with authority pubkey
+      const { data: ledger, error: ledgerError } = await supabase
+        .from("ledgers")
+        .select("*")
+        .eq("id", generalLedgerId)
+        .eq("workspace_id", workspaceId)
+        .single();
+
+      if (ledgerError || !ledger) {
+        return NextResponse.json({ error: "Ledger not found" }, { status: 404 });
+      }
+
+      if (!ledger.authority_pubkey) {
+        return NextResponse.json(
+          { error: "Ledger authority pubkey not set" },
+          { status: 400 },
+        );
+      }
+
+      targetLedgerKey = ledger.onchain_ledger_key;
+    }
+
+    if (!targetLedgerKey) {
+      return NextResponse.json({ error: "Base GL ledger key is required" }, { status: 400 });
+    }
+
     // 4. Call accounting service to initialize GL accounts
     const result = await accountingEngineService.initializeGlAccounts(
-      new PublicKey(ledger.onchain_ledger_key),
+      new PublicKey(targetLedgerKey),
       authorityWallet,
       initializationType as "ar" | "ap",
     );
@@ -97,18 +109,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Store that GL accounts have been initialized
-    const { error: updateError } = await supabase
-      .from("ledgers")
-      .update({
-        gl_accounts_initialized: true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", generalLedgerId);
+    if (!isBuyerLedger && !isBaseGlLedger) {
+      // Store that GL accounts have been initialized for seller ledgers.
+      const { error: updateError } = await supabase
+        .from("ledgers")
+        .update({
+          gl_accounts_initialized: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", generalLedgerId);
 
-    if (updateError) {
-      console.error("Error updating ledger:", updateError);
-      // Don't fail the response, GL accounts were created on-chain
+      if (updateError) {
+        console.error("Error updating ledger:", updateError);
+        // Don't fail the response, GL accounts were created on-chain
+      }
     }
 
     return NextResponse.json({

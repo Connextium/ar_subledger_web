@@ -421,6 +421,15 @@ export class ApSubledgerService implements ApSubledgerServiceContract {
       .filter((row) => (ledgerPubkey ? row.ledger === ledgerPubkey : true));
   }
 
+  async getVendorInvoice(pubkey: string): Promise<VendorInvoiceRecord | null> {
+    try {
+      const account = await this.accountNs.vendorInvoice.fetch(new PublicKey(pubkey));
+      return this.mapVendorInvoiceRecord(pubkey, account);
+    } catch {
+      return null;
+    }
+  }
+
   async listVendorInvoices(ledgerPubkey?: string): Promise<VendorInvoiceRecord[]> {
     const rows = (await this.safeAccountAll("vendorInvoice", () =>
       this.accountNs.vendorInvoice.all(),

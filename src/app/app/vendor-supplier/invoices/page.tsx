@@ -192,7 +192,7 @@ export default function InvoicesPage() {
               const customer = customerById.get(row.customer);
               if (!customer) return row.customer;
               return (
-                <Link href={`/app/customers/${customer.pubkey}`} className="underline decoration-slate-300">
+                <Link href={`/app/vendor-supplier/customers/${customer.pubkey}`} className="underline decoration-slate-300">
                   {customer.customerCode}
                 </Link>
               );

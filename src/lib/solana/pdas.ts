@@ -3,6 +3,7 @@ import {
   ACCOUNTING_ENGINE_PROGRAM_ID,
   AP_SUBLEDGER_PROGRAM_ID,
   PROGRAM_ID,
+  SETTLEMENT_FACILITATOR_PROGRAM_ID,
   SEEDS,
 } from "@/lib/solana/constants";
 
@@ -62,6 +63,16 @@ export function deriveJournalEntryPda(
   );
 }
 
+export function derivePostingDelegatePda(
+  accountingLedger: PublicKey,
+  delegate: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.postingDelegate, accountingLedger.toBuffer(), delegate.toBuffer()],
+    ACCOUNTING_ENGINE_PROGRAM_ID,
+  );
+}
+
 export function deriveCustomerPda(ledger: PublicKey, customerCode: string): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [SEEDS.customer, ledger.toBuffer(), Buffer.from(customerCode)],
@@ -116,5 +127,35 @@ export function deriveVendorPaymentPda(invoice: PublicKey, seq: bigint): [Public
   return PublicKey.findProgramAddressSync(
     [SEEDS.vendorPayment, invoice.toBuffer(), seqBuf],
     AP_SUBLEDGER_PROGRAM_ID,
+  );
+}
+
+export function deriveSettlementRoutePda(
+  facilitator: PublicKey,
+  routeCode: string,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.settlementRoute, facilitator.toBuffer(), Buffer.from(routeCode)],
+    SETTLEMENT_FACILITATOR_PROGRAM_ID,
+  );
+}
+
+export function deriveSettlementDocumentPda(
+  route: PublicKey,
+  documentHash: string,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.settlementDocument, route.toBuffer(), Buffer.from(documentHash)],
+    SETTLEMENT_FACILITATOR_PROGRAM_ID,
+  );
+}
+
+export function deriveSettlementExecutionPda(
+  document: PublicKey,
+  settlementSeq: bigint,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.settlementExecution, document.toBuffer(), u64ToLeBuffer(settlementSeq)],
+    SETTLEMENT_FACILITATOR_PROGRAM_ID,
   );
 }

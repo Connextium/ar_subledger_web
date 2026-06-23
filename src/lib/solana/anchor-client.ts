@@ -6,6 +6,8 @@ import { env } from "@/lib/config/env";
 import type { EmbeddedWallet } from "@/lib/solana/embedded-wallet";
 import idl from "@/lib/solana/ar_subledger.idl.json";
 import apIdl from "@/lib/solana/ap_subledger.idl.json";
+import settlementIdl from "@/lib/solana/settlement_facilitator.idl.json";
+import accountingIdl from "@/lib/idl/accounting_engine.json";
 
 export const connection = new Connection(env.solanaRpcUrl, {
   commitment: "confirmed",
@@ -38,6 +40,24 @@ export function createApSubledgerProgram(wallet: EmbeddedWallet): Program<Idl> {
   const runtimeIdl = {
     ...(apIdl as Idl & { address?: string }),
     address: env.apSubledgerProgramId,
+  };
+  return new Program(runtimeIdl as Idl, provider);
+}
+
+export function createSettlementFacilitatorProgram(wallet: EmbeddedWallet): Program<Idl> {
+  const provider = createAnchorProvider(wallet);
+  const runtimeIdl = {
+    ...(settlementIdl as Idl & { address?: string }),
+    address: env.settlementFacilitatorProgramId,
+  };
+  return new Program(runtimeIdl as Idl, provider);
+}
+
+export function createAccountingEngineProgram(wallet: EmbeddedWallet): Program<Idl> {
+  const provider = createAnchorProvider(wallet);
+  const runtimeIdl = {
+    ...(accountingIdl as Idl & { address?: string }),
+    address: env.accountingEngineProgramId,
   };
   return new Program(runtimeIdl as Idl, provider);
 }

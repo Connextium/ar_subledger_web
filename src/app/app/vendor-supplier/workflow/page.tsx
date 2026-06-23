@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageTitle } from "@/components/ui/page-title";
@@ -276,8 +277,8 @@ export default function WorkflowPage() {
     setErrors({});
     setSuccess(null);
     if (!canWriteTransactions) { setErrors({ form: "Your current role does not allow transaction writes." }); return; }
-    if (!service || !ledgerPda) { setErrors({ form: "Select a ledger in Working Context first." }); return; }
-    if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the ledger first." }); return; }
+    if (!service || !ledgerPda) { setErrors({ form: "Select a Supplier ledger in Supplier AR Context first." }); return; }
+    if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the Supplier ledger first." }); return; }
     if (!selectedInvoice) { setErrors({ form: "Select an invoice first." }); return; }
     const txKey = `receipt:${selectedInvoice.pubkey}:${receiptSeq}`;
     if (inFlightTransactions.has(txKey)) { setErrors({ form: "Receipt already submitted. Wait for confirmation or use a different Seq." }); return; }
@@ -311,8 +312,8 @@ export default function WorkflowPage() {
     setErrors({});
     setSuccess(null);
     if (!canWriteTransactions) { setErrors({ form: "Your current role does not allow transaction writes." }); return; }
-    if (!service || !ledgerPda) { setErrors({ form: "Select a ledger in Working Context first." }); return; }
-    if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the ledger first." }); return; }
+    if (!service || !ledgerPda) { setErrors({ form: "Select a Supplier ledger in Supplier AR Context first." }); return; }
+    if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the Supplier ledger first." }); return; }
     if (!selectedInvoice) { setErrors({ form: "Select an invoice first." }); return; }
     const txKey = `credit:${selectedInvoice.pubkey}:${creditSeq}`;
     if (inFlightTransactions.has(txKey)) { setErrors({ form: "Credit note already submitted. Wait for confirmation or use a different Seq." }); return; }
@@ -341,8 +342,8 @@ export default function WorkflowPage() {
     setErrors({});
     setSuccess(null);
     if (!canWriteTransactions) { setErrors({ form: "Your current role does not allow transaction writes." }); return; }
-    if (!service || !ledgerPda) { setErrors({ form: "Select a ledger in Working Context first." }); return; }
-    if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the ledger first." }); return; }
+    if (!service || !ledgerPda) { setErrors({ form: "Select a Supplier ledger in Supplier AR Context first." }); return; }
+    if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the Supplier ledger first." }); return; }
     if (!selectedInvoice) { setErrors({ form: "Select an invoice first." }); return; }
     const txKey = `writeoff:${selectedInvoice.pubkey}`;
     if (inFlightTransactions.has(txKey)) { setErrors({ form: "Write-off already submitted. Wait for confirmation." }); return; }
@@ -370,6 +371,12 @@ export default function WorkflowPage() {
   return (
     <div className="space-y-3">
       <PageTitle title="Workflow" subtitle="Context-aware cards and invoice-first settlement workflow." />
+      <div className="grid gap-2 md:grid-cols-4">
+        <Link href="/app/vendor-supplier/ledgers" className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">Create AR Ledger</Link>
+        <Link href="/app/vendor-supplier/customers" className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">Create Customer</Link>
+        <Link href="/app/vendor-supplier/invoices" className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">Customer Invoices</Link>
+        <Link href="/app/vendor-supplier/facilitator-authorizations" className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">Authorize Facilitator</Link>
+      </div>
 
       {loading ? <p className="text-[11px] text-slate-500">Loading workflow data...</p> : null}
       {success ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">{success}</p> : null}
@@ -388,12 +395,12 @@ export default function WorkflowPage() {
             }
 
             if (!service || !ledgerPda) {
-              setErrors({ form: "Select a ledger in Working Context first." });
+              setErrors({ form: "Select a Supplier ledger in Supplier AR Context first." });
               return;
             }
 
             if (!activeOnchainCustomerPubkey) {
-              setErrors({ form: "Select a customer that is linked to the selected ledger first." });
+              setErrors({ form: "Select a customer that is linked to the selected Supplier ledger first." });
               return;
             }
 
@@ -444,7 +451,7 @@ export default function WorkflowPage() {
             <Input label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
             {!activeOnchainCustomerPubkey ? (
               <p className="text-[11px] text-slate-600">
-                Select a ledger and a linked customer in context bar to enable submission.
+                Select a Supplier ledger and a linked customer in Supplier AR Context to enable submission.
               </p>
             ) : null}
             {hasLedgerAuthorityMismatch ? (

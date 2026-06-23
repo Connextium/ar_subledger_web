@@ -6,8 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
+import { useWorkspace } from "@/context/workspace-context";
 import type { BuyerLedgerRecord, VendorInvoiceRecord, VendorPaymentRecord, VendorRecord } from "@/lib/types/domain";
+import { formatLamportsAmount, parseAmountToMinor } from "@/lib/utils/format";
 import { createApSubledgerService } from "@/services/ap-subledger-service";
+import { filterBuyerLedgersByWorkspaceLinks } from "@/services/buyer-ledger-workspace";
+import { controlPlaneService } from "@/services/control-plane-service";
 
 function toUnix(date: string) {
   return Math.floor(new Date(date).getTime() / 1000);
@@ -15,6 +19,7 @@ function toUnix(date: string) {
 
 export default function PaymentsPage() {
   const { wallet } = useEmbeddedWallet();
+  const { selectedWorkspaceId, workspaces } = useWorkspace();
   const service = useMemo(() => (wallet ? createApSubledgerService(wallet) : null), [wallet]);
   const [rows, setRows] = useState<VendorPaymentRecord[]>([]);
   const [buyerLedgers, setBuyerLedgers] = useState<BuyerLedgerRecord[]>([]);
@@ -30,6 +35,7 @@ export default function PaymentsPage() {
   const [paymentReference, setPaymentReference] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const activeWorkspaceId = selectedWorkspaceId ?? workspaces[0]?.id ?? null;
 
   const vendorsForLedger = useMemo(() => {
     if (!ledgerPubkey) return [];
@@ -52,24 +58,42 @@ export default function PaymentsPage() {
   );
 
   useEffect(() => {
-    if (!service) {
+    setBuyerLedgers([]);
+    setLedgerPubkey("");
+    setVendorPubkey("");
+    setInvoicePubkey("");
+
+    if (!service || !activeWorkspaceId) {
       setRows([]);
-      setBuyerLedgers([]);
       setAllVendors([]);
       setLedgerInvoices([]);
       return;
     }
-    Promise.all([
-      service.listVendorPayments().then(setRows),
-      service.listBuyerLedgers().then((ledgers) => {
-        setBuyerLedgers(ledgers);
-        if (ledgers.length > 0 && !ledgerPubkey) {
-          setLedgerPubkey(ledgers[0].pubkey);
-        }
-      }),
-      service.listVendors().then(setAllVendors),
-    ]).catch((error) => setMessage(String(error)));
-  }, [service, ledgerPubkey]);
+
+    let cancelled = false;
+    void Promise.all([
+      service.listVendorPayments(),
+      service.listBuyerLedgers(),
+      service.listVendors(),
+      controlPlaneService.listBuyerLedgerLinks(activeWorkspaceId),
+      controlPlaneService.listLedgerLinks(activeWorkspaceId),
+    ])
+      .then(([payments, ledgers, vendors, links, workspaceLedgerLinks]) => {
+        if (cancelled) return;
+        const scopedLedgers = filterBuyerLedgersByWorkspaceLinks(ledgers, links, workspaceLedgerLinks);
+        setRows(payments);
+        setAllVendors(vendors);
+        setBuyerLedgers(scopedLedgers);
+        setLedgerPubkey(scopedLedgers[0]?.pubkey ?? "");
+      })
+      .catch((error) => {
+        if (!cancelled) setMessage(String(error));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId, service]);
 
   useEffect(() => {
     if (!service || !ledgerPubkey) {
@@ -95,7 +119,7 @@ export default function PaymentsPage() {
     }
     setPaymentSeq(String(selectedInvoice.paymentSeq + 1));
     if (!amount) {
-      setAmount(String(selectedInvoice.openAmount));
+      setAmount((selectedInvoice.openAmount / 100).toFixed(2));
     }
   }, [selectedInvoice, amount]);
 
@@ -110,7 +134,7 @@ export default function PaymentsPage() {
         invoicePubkey,
         paymentSeq: Number(paymentSeq),
         paymentNo,
-        amountMinor: Number(amount),
+        amountMinor: parseAmountToMinor(amount),
         paymentDateUnix: toUnix(paymentDate),
         paymentReference,
       });
@@ -171,19 +195,19 @@ export default function PaymentsPage() {
               { value: "", label: "Select an open invoice..." },
               ...invoicesForSelection.map((invoice) => ({
                 value: invoice.pubkey,
-                label: `${invoice.invoiceNo} | Open ${invoice.openAmount} | ${invoice.pubkey.slice(0, 8)}...`,
+                label: `${invoice.invoiceNo} | Open ${formatLamportsAmount(invoice.openAmount, invoice.currency || "USD")} | ${invoice.pubkey.slice(0, 8)}...`,
               })),
             ]}
           />
           <Input label="Payment Seq" value={paymentSeq} onChange={(event) => setPaymentSeq(event.target.value)} />
           <Input label="Payment No" value={paymentNo} onChange={(event) => setPaymentNo(event.target.value)} />
-          <Input label="Amount Minor" value={amount} onChange={(event) => setAmount(event.target.value)} />
+          <Input label="Amount" value={amount} onChange={(event) => setAmount(event.target.value)} />
           <Input label="Payment Date" type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
           <Input label="Payment Reference" value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} />
         </div>
         {selectedInvoice ? (
           <p className="mt-2 text-[11px] text-slate-500">
-            Selected invoice {selectedInvoice.invoiceNo} has open amount {selectedInvoice.openAmount} and next payment sequence {selectedInvoice.paymentSeq + 1}.
+            Selected invoice {selectedInvoice.invoiceNo} has open amount {formatLamportsAmount(selectedInvoice.openAmount, selectedInvoice.currency || "USD")} and next payment sequence {selectedInvoice.paymentSeq + 1}.
           </p>
         ) : null}
         <div className="mt-3"><Button disabled={!wallet || busy || !ledgerPubkey || !vendorPubkey || !invoicePubkey} onClick={handlePay}>Post Payment</Button></div>
@@ -195,7 +219,7 @@ export default function PaymentsPage() {
             <div key={row.pubkey} className="rounded-md border border-slate-200 px-3 py-2 text-[11px] text-slate-600">
               <p className="font-semibold text-slate-900">{row.paymentNo}</p>
               <p className="font-mono">{row.pubkey}</p>
-              <p>Amount {row.amount} | Journal entry {row.journalEntryId}</p>
+              <p>Amount {formatLamportsAmount(row.amount)} | Journal entry {row.journalEntryId}</p>
             </div>
           ))}
           {rows.length === 0 ? <p className="text-[11px] text-slate-500">No vendor payments loaded.</p> : null}

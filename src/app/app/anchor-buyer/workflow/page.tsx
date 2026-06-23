@@ -14,6 +14,7 @@ export default function AnchorBuyerWorkflowPage() {
           <Link href="/app/anchor-buyer/vendors" className="rounded-md border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">Create Vendor</Link>
           <Link href="/app/anchor-buyer/vendor-invoices" className="rounded-md border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">Receive Vendor Invoice</Link>
           <Link href="/app/anchor-buyer/payments" className="rounded-md border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">Post Vendor Payment</Link>
+          <Link href="/app/anchor-buyer/facilitator-authorizations" className="rounded-md border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">Authorize Facilitator</Link>
         </div>
       </section>
     </div>

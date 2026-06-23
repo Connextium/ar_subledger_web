@@ -176,26 +176,13 @@ export default function LedgersPage() {
   const workspaceScopedRows = useMemo(() => {
     if (!activeWorkspaceId) return [];
 
-    const workspaceLinks = ledgerLinks.filter((row) => row.workspaceId === activeWorkspaceId);
-    const rowByPda = new Map(rows.map((row) => [row.pubkey, row]));
+    const linkedSupplierLedgerPdas = new Set(
+      ledgerLinks
+        .filter((row) => row.workspaceId === activeWorkspaceId)
+        .map((row) => row.ledgerPda),
+    );
 
-    return workspaceLinks.map((link) => {
-      const onchain = rowByPda.get(link.ledgerPda);
-      if (onchain) return onchain;
-      return {
-        pubkey: link.ledgerPda,
-        authority: link.authorityPubkey,
-        ledgerCode: link.ledgerCode,
-        accountingLedger: "",
-        arControlAccountCode: 0,
-        revenueAccountCode: 0,
-        cashAccountCode: 0,
-        writeoffExpenseAccountCode: 0,
-        nextJournalEntryId: 0,
-        customerCount: 0,
-        invoiceCount: 0,
-      };
-    });
+    return rows.filter((row) => linkedSupplierLedgerPdas.has(row.pubkey));
   }, [activeWorkspaceId, ledgerLinks, rows]);
 
   const filtered = workspaceScopedRows.filter((row) => {
@@ -452,7 +439,7 @@ export default function LedgersPage() {
           </header>
           <div className="max-h-[620px] overflow-auto p-2">
             {!selectedLedger ? (
-              <p className="px-2 py-4 text-xs text-slate-500">Select a ledger to load scoped customers.</p>
+              <p className="px-2 py-4 text-xs text-slate-500">Select a Supplier ledger to load scoped customers.</p>
             ) : loadingCustomers ? (
               <p className="px-2 py-4 text-xs text-slate-500">Loading customers...</p>
             ) : customersByLedger.length === 0 ? (
@@ -632,7 +619,7 @@ export default function LedgersPage() {
             ) : null}
 
             {!isInitializingNewLedgerMode && !selectedLedger ? (
-              <p className="text-xs text-slate-500">Select a ledger from the left pane to edit workspace link settings.</p>
+              <p className="text-xs text-slate-500">Select a Supplier ledger from the left pane to edit workspace link settings.</p>
             ) : !isInitializingNewLedgerMode && selectedLedger ? (
               <>
                 <div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-[11px]">
