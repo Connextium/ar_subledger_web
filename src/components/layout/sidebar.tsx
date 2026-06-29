@@ -22,7 +22,6 @@ const navSections = [
       { href: "/app/anchor-buyer/vendor-invoices", label: "Vendor Invoices" },
       { href: "/app/anchor-buyer/payments", label: "Vendor Payments" },
       { href: "/app/anchor-buyer/facilitator-authorizations", label: "Facilitator Access" },
-      { href: "/app/anchor-buyer/workflow", label: "Buyer Workflow" },
     ],
   },
   {

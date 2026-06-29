@@ -24,6 +24,10 @@ assert.ok(sidebar.includes('{ href: "/app/anchor-buyer/workflow", label: "Buyer 
 assert.ok(!sidebar.includes('{ href: "/app/anchor-buyer", label: "Buyer Home" }'));
 assert.ok(!sidebar.includes("/^\\/app\\/ledgers\\/"));
 
+const sidebarHrefs = Array.from(sidebar.matchAll(/href: "([^"]+)"/g), (match) => match[1]);
+const duplicateSidebarHrefs = sidebarHrefs.filter((href, index) => sidebarHrefs.indexOf(href) !== index);
+assert.deepEqual(duplicateSidebarHrefs, [], "sidebar nav hrefs must be unique because href is used as the React key");
+
 const invoices = readFileSync(resolve("src/app/app/vendor-supplier/invoices/page.tsx"), "utf8");
 assert.ok(invoices.includes("`/app/vendor-supplier/customers/${customer.pubkey}`"));
 assert.ok(!invoices.includes("`/app/customers/${customer.pubkey}`"));
