@@ -7,14 +7,20 @@ import GlSetupComponent from "@/components/accounting/gl-setup";
 import JournalEntriesComponent from "@/components/accounting/journal-entries";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
-import { supabase } from "@/lib/supabase/client";
+import { supabase } from "@/lib/api-client/v1/session-client";
+
+type LedgerRow = {
+  onchain_ledger_key?: string | null;
+  code?: string | null;
+  name?: string | null;
+};
 
 export default function LedgerAccountingPage() {
   const params = useParams();
   const ledgerId = params?.id as string;
   const { selectedWorkspaceId } = useWorkspace();
 
-  const [ledger, setLedger] = useState<any>(null);
+  const [ledger, setLedger] = useState<LedgerRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +45,7 @@ export default function LedgerAccountingPage() {
         throw fetchError;
       }
 
-      setLedger(data);
+      setLedger(data as LedgerRow | null);
     } catch (err) {
       console.error("Error loading ledger:", err);
       setError(err instanceof Error ? err.message : "Failed to load ledger");

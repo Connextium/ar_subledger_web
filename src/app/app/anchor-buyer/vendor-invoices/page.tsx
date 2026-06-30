@@ -10,9 +10,9 @@ import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
 import type { BuyerLedgerRecord, VendorRecord, VendorInvoiceRecord } from "@/lib/types/domain";
 import { formatLamportsAmount, parseAmountToMinor } from "@/lib/utils/format";
-import { createApSubledgerService } from "@/services/ap-subledger-service";
-import { filterBuyerLedgersByWorkspaceLinks } from "@/services/buyer-ledger-workspace";
-import { controlPlaneService } from "@/services/control-plane-service";
+import { createApSubledgerService } from "@/lib/api-client/v1/buyer";
+import { filterBuyerLedgersByWorkspaceLinks } from "@/lib/api-client/v1/buyer-ledger-workspace";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
 
 function toUnix(date: string) {
   return Math.floor(new Date(date).getTime() / 1000);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@/lib/api-client/v1/public-key";
 import Link from "next/link";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -18,9 +18,9 @@ import {
   accountingEngineService,
   GlAccount,
   JournalEntry,
-} from "@/services/accounting-engine-service";
-import { createApSubledgerService } from "@/services/ap-subledger-service";
-import { controlPlaneService } from "@/services/control-plane-service";
+} from "@/lib/api-client/v1/accounting";
+import { createApSubledgerService } from "@/lib/api-client/v1/buyer";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
 
 type LinkedSubLedger = {
   id: string;

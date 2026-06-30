@@ -3,14 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import type { BuyerLedgerRecord, LedgerRecord, SettlementRouteRecord } from "@/lib/types/domain";
-import { accountingEngineService, type AccountingLedger } from "@/services/accounting-engine-service";
-import { createApSubledgerService } from "@/services/ap-subledger-service";
-import { createArSubledgerService } from "@/services/ar-subledger-service";
-import { createSettlementFacilitatorService } from "@/services/settlement-facilitator-service";
+import { accountingEngineService, type AccountingLedger } from "@/lib/api-client/v1/accounting";
+import { createApSubledgerService } from "@/lib/api-client/v1/buyer";
+import { createArSubledgerService } from "@/lib/api-client/v1/supplier";
+import { createSettlementFacilitatorService } from "@/lib/api-client/v1/facilitator";
 
 function LedgerIdentity({ label, code, pubkey }: { label: string; code?: string | null; pubkey: string }) {
   return (

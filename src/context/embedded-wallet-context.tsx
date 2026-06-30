@@ -1,11 +1,11 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { EmbeddedWallet } from "@/lib/solana/embedded-wallet";
+import { EmbeddedWallet } from "@/lib/api-client/v1/embedded-wallet";
 import { useAuth } from "@/context/auth-context";
 import { useWorkspace } from "@/context/workspace-context";
 import { env } from "@/lib/config/env";
-import { supabase } from "@/lib/supabase/client";
+import { supabase } from "@/lib/api-client/v1/session-client";
 import type { WorkspaceWallet } from "@/lib/types/wallet";
 
 type EmbeddedWalletContextValue = {

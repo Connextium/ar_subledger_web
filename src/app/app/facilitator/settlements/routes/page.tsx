@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input";
 import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
-import { deriveSettlementRoutePda } from "@/lib/solana/pdas";
+import { deriveSettlementRoutePda } from "@/lib/api-client/v1/pdas";
 import type { SettlementRouteRecord } from "@/lib/types/domain";
-import { controlPlaneService } from "@/services/control-plane-service";
-import { createSettlementFacilitatorService } from "@/services/settlement-facilitator-service";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
+import { createSettlementFacilitatorService } from "@/lib/api-client/v1/facilitator";
 
 export default function SettlementRoutesPage() {
   const { wallet } = useEmbeddedWallet();

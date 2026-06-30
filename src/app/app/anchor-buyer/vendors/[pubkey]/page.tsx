@@ -16,8 +16,8 @@ import type {
   WorkspaceVendorLedgerLink,
   WorkspaceVendorStatus,
 } from "@/lib/types/domain";
-import { createApSubledgerService } from "@/services/ap-subledger-service";
-import { controlPlaneService } from "@/services/control-plane-service";
+import { createApSubledgerService } from "@/lib/api-client/v1/buyer";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
 
 export default function VendorDetailPage() {
   const params = useParams();

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useWorkspace } from "@/context/workspace-context";
-import { controlPlaneService } from "@/services/control-plane-service";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
 import type { WorkspaceCustomer, WorkspaceLedgerLink } from "@/lib/types/domain";
 
 const WORKING_CONTEXT_STORAGE_KEY = "ar:working-context";

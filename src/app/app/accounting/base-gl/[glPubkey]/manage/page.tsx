@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { AlertCircle } from "lucide-react";
 import GlSetupComponent from "@/components/accounting/gl-setup";
 import JournalEntriesComponent from "@/components/accounting/journal-entries";
@@ -11,8 +11,8 @@ import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
 import { BuyerLedgerRecord, LedgerRecord } from "@/lib/types/domain";
-import { AccountingLedger, accountingEngineService } from "@/services/accounting-engine-service";
-import { createApSubledgerService } from "@/services/ap-subledger-service";
+import { AccountingLedger, accountingEngineService } from "@/lib/api-client/v1/accounting";
+import { createApSubledgerService } from "@/lib/api-client/v1/buyer";
 
 export default function BaseGlAccountingManagePage() {
   const params = useParams();

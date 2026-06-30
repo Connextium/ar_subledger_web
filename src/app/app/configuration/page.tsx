@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/context/workspace-context";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useRoleGate } from "@/hooks/use-role-gate";
-import { supabase } from "@/lib/supabase/client";
+import { supabase } from "@/lib/api-client/v1/session-client";
 import { env } from "@/lib/config/env";
 import type { WalletUsage, WorkspaceWallet } from "@/lib/types/wallet";
 import { clampText } from "@/lib/utils/format";

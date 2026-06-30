@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -12,9 +12,9 @@ import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
 import type { SettlementDocumentRecord, SettlementExecutionRecord, SettlementRouteRecord } from "@/lib/types/domain";
 import { formatLamportsAmount, parseAmountToMinor } from "@/lib/utils/format";
-import { accountingEngineService, type PostingDelegateStatus } from "@/services/accounting-engine-service";
-import { controlPlaneService } from "@/services/control-plane-service";
-import { createSettlementFacilitatorService } from "@/services/settlement-facilitator-service";
+import { accountingEngineService, type PostingDelegateStatus } from "@/lib/api-client/v1/accounting";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
+import { createSettlementFacilitatorService } from "@/lib/api-client/v1/facilitator";
 
 export default function SettlementExecutionsPage() {
   const { wallet } = useEmbeddedWallet();

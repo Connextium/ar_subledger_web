@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageTitle } from "@/components/ui/page-title";
@@ -11,11 +11,11 @@ import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
 import { useRoleGate } from "@/hooks/use-role-gate";
 import type { BuyerLedgerRecord, LedgerRecord } from "@/lib/types/domain";
-import { createApSubledgerService } from "@/services/ap-subledger-service";
-import { filterBuyerLedgersByWorkspaceLinks } from "@/services/buyer-ledger-workspace";
-import { accountingEngineService, type PostingDelegateStatus } from "@/services/accounting-engine-service";
-import { createArSubledgerService } from "@/services/ar-subledger-service";
-import { controlPlaneService } from "@/services/control-plane-service";
+import { createApSubledgerService } from "@/lib/api-client/v1/buyer";
+import { filterBuyerLedgersByWorkspaceLinks } from "@/lib/api-client/v1/buyer-ledger-workspace";
+import { accountingEngineService, type PostingDelegateStatus } from "@/lib/api-client/v1/accounting";
+import { createArSubledgerService } from "@/lib/api-client/v1/supplier";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
 
 type LedgerSide = "buyer" | "supplier";
 

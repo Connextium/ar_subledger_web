@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
@@ -13,9 +13,9 @@ import type {
   SettlementRouteRecord,
 } from "@/lib/types/domain";
 import { formatLamportsAmount } from "@/lib/utils/format";
-import { accountingEngineService, type JournalEntry } from "@/services/accounting-engine-service";
-import { controlPlaneService } from "@/services/control-plane-service";
-import { createSettlementFacilitatorService } from "@/services/settlement-facilitator-service";
+import { accountingEngineService, type JournalEntry } from "@/lib/api-client/v1/accounting";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
+import { createSettlementFacilitatorService } from "@/lib/api-client/v1/facilitator";
 
 const DOCUMENT_STATUS: Record<number, string> = {
   1: "Open",

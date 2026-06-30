@@ -10,7 +10,7 @@ import { PageTitle } from "@/components/ui/page-title";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
 import type { ActivityItem, InvoiceRecord } from "@/lib/types/domain";
 import { formatLamportsAmount, formatUnixDate } from "@/lib/utils/format";
-import { controlPlaneService } from "@/services/control-plane-service";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
 
 export default function TimelinePage() {
   const service = useArSubledger();

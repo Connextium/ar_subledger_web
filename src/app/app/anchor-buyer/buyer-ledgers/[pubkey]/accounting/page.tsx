@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import type { BuyerLedgerRecord } from "@/lib/types/domain";
-import { createApSubledgerService } from "@/services/ap-subledger-service";
+import { createApSubledgerService } from "@/lib/api-client/v1/buyer";
 import { AlertCircle } from "lucide-react";
 
 export default function BuyerLedgerAccountingPage() {

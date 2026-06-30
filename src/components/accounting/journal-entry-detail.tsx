@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { PageTitle } from "@/components/ui/page-title";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, AlertCircle, CheckCircle, ArrowLeft } from "lucide-react";
-import { accountingEngineService, JournalEntry, PostingLine } from "@/services/accounting-engine-service";
+import { accountingEngineService, JournalEntry, PostingLine } from "@/lib/api-client/v1/accounting";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { supabase } from "@/lib/supabase/client";
+import { supabase } from "@/lib/api-client/v1/session-client";
 
 interface EnrichedPostingLine extends PostingLine {
   accountName?: string;

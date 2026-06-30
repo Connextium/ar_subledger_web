@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { AppRole, Workspace, WorkspaceLedgerLink } from "@/lib/types/domain";
 import { useAuth } from "@/context/auth-context";
-import { controlPlaneService } from "@/services/control-plane-service";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
 
 type WorkspaceContextValue = {
   workspaces: Workspace[];

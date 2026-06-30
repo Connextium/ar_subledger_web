@@ -12,9 +12,9 @@ import { useArSubledger } from "@/hooks/use-ar-subledger";
 import { useWorkspace } from "@/context/workspace-context";
 import { useWorkingContext } from "@/context/working-context";
 import { useRoleGate } from "@/hooks/use-role-gate";
-import { controlPlaneService } from "@/services/control-plane-service";
-import { PublicKey } from "@solana/web3.js";
-import { deriveCustomerPda } from "@/lib/solana/pdas";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
+import { PublicKey } from "@/lib/api-client/v1/public-key";
+import { deriveCustomerPda } from "@/lib/api-client/v1/pdas";
 import {
   createWorkspaceCustomerSchema,
   reserveWorkspaceCustomerCodeSchema,

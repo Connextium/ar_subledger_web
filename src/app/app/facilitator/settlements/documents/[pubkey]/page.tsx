@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { Button } from "@/components/ui/button";
 import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
 import { compareSettlementInvoice, type SettlementInvoiceMatch } from "@/lib/settlement/invoice-match";
-import { deriveInvoicePda, deriveVendorInvoicePda } from "@/lib/solana/pdas";
+import { deriveInvoicePda, deriveVendorInvoicePda } from "@/lib/api-client/v1/pdas";
 import type {
   InvoiceRecord,
   SettlementDocumentRecord,
@@ -17,10 +17,10 @@ import type {
   VendorInvoiceRecord,
 } from "@/lib/types/domain";
 import { formatLamportsAmount } from "@/lib/utils/format";
-import { createApSubledgerService } from "@/services/ap-subledger-service";
-import { createArSubledgerService } from "@/services/ar-subledger-service";
-import { controlPlaneService } from "@/services/control-plane-service";
-import { createSettlementFacilitatorService } from "@/services/settlement-facilitator-service";
+import { createApSubledgerService } from "@/lib/api-client/v1/buyer";
+import { createArSubledgerService } from "@/lib/api-client/v1/supplier";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
+import { createSettlementFacilitatorService } from "@/lib/api-client/v1/facilitator";
 
 const DOCUMENT_STATUS: Record<number, string> = {
   1: "Open",

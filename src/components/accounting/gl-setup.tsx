@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { PageTitle } from "@/components/ui/page-title";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, AlertCircle, CheckCircle } from "lucide-react";
-import { accountingEngineService, GlAccount } from "@/services/accounting-engine-service";
-import { supabase } from "@/lib/supabase/client";
+import { accountingEngineService, GlAccount } from "@/lib/api-client/v1/accounting";
+import { supabase } from "@/lib/api-client/v1/session-client";
 import { useParams } from "next/navigation";
 import { useWorkspace } from "@/context/workspace-context";
 

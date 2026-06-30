@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
-import { createSettlementFacilitatorService } from "@/services/settlement-facilitator-service";
+import { createSettlementFacilitatorService } from "@/lib/api-client/v1/facilitator";
 
 export default function FacilitatorSettlementsPage() {
   const { wallet } = useEmbeddedWallet();

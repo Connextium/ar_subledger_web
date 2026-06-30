@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { PageTitle } from "@/components/ui/page-title";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, AlertCircle, ChevronRight } from "lucide-react";
-import { accountingEngineService, JournalEntry } from "@/services/accounting-engine-service";
+import { accountingEngineService, JournalEntry } from "@/lib/api-client/v1/accounting";
 import Link from "next/link";
 
 interface Props {
@@ -65,8 +65,8 @@ type SortOrder = "asc" | "desc";
 
     // Sort
     const sorted = [...filtered].sort((a, b) => {
-      let aVal: any;
-      let bVal: any;
+      let aVal: string | number | bigint;
+      let bVal: string | number | bigint;
 
       if (sortField === "entryId") {
         aVal = a.account.entryId;

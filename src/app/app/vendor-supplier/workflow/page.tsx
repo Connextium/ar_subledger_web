@@ -11,8 +11,8 @@ import { useRoleGate } from "@/hooks/use-role-gate";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
 import { useWorkingContext } from "@/context/working-context";
-import { controlPlaneService } from "@/services/control-plane-service";
-import { accountingEngineService } from "@/services/accounting-engine-service";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
+import { accountingEngineService } from "@/lib/api-client/v1/accounting";
 import {
   closeInvoiceSchema,
   issueCreditNoteSchema,
@@ -31,7 +31,7 @@ import type {
   WorkspaceLedgerLink,
 } from "@/lib/types/domain";
 import { formatLamportsAmount, parseAmountToMinor } from "@/lib/utils/format";
-import { supabase } from "@/lib/supabase/client";
+import { supabase } from "@/lib/api-client/v1/session-client";
 
 function toUnix(date: string): number {
   return Math.floor(new Date(date).getTime() / 1000);

@@ -9,9 +9,9 @@ import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
 import type { BuyerLedgerRecord, VendorRecord } from "@/lib/types/domain";
-import { createApSubledgerService } from "@/services/ap-subledger-service";
-import { filterBuyerLedgersByWorkspaceLinks } from "@/services/buyer-ledger-workspace";
-import { controlPlaneService } from "@/services/control-plane-service";
+import { createApSubledgerService } from "@/lib/api-client/v1/buyer";
+import { filterBuyerLedgersByWorkspaceLinks } from "@/lib/api-client/v1/buyer-ledger-workspace";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
 
 export default function VendorsPage() {
   const { wallet } = useEmbeddedWallet();

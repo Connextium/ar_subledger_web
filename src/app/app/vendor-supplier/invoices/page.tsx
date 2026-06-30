@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
 import { INVOICE_STATUS_LABEL, type CustomerRecord, type InvoiceRecord } from "@/lib/types/domain";
 import { formatLamportsAmount, formatUnixDate } from "@/lib/utils/format";
-import { controlPlaneService } from "@/services/control-plane-service";
+import { controlPlaneService } from "@/lib/api-client/v1/platform";
 
 export default function InvoicesPage() {
   const service = useArSubledger();
