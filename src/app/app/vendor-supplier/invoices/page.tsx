@@ -218,7 +218,10 @@ export default function InvoicesPage() {
             label: "Actions",
             render: (row) => (
               <div className="flex flex-wrap gap-2">
-                <Link href={`/app/settlements?invoice=${row.pubkey}`} className="underline decoration-slate-300">
+                <Link
+                  href={`/app/vendor-supplier/settlements?invoice=${row.pubkey}`}
+                  className="underline decoration-slate-300"
+                >
                   Settlements
                 </Link>
                 <Link href="/app/vendor-supplier/workflow#record-receipt" className="underline decoration-slate-300">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,6 @@ import type {
   InvoiceRecord,
   LedgerRecord,
   ReceiptRecord,
-  WorkspaceCustomer,
   WorkspaceCustomerLedgerLink,
   WorkspaceLedgerLink,
 } from "@/lib/types/domain";
@@ -58,7 +57,6 @@ export default function WorkflowPage() {
 
   const [ledgers, setLedgers] = useState<LedgerRecord[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
-  const [workspaceCustomers, setWorkspaceCustomers] = useState<WorkspaceCustomer[]>([]);
   const [workspaceLedgerLinks, setWorkspaceLedgerLinks] = useState<WorkspaceLedgerLink[]>([]);
   const [customerLinks, setCustomerLinks] = useState<WorkspaceCustomerLedgerLink[]>([]);
   const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
@@ -147,7 +145,7 @@ export default function WorkflowPage() {
     selectedLedger && currentSignerPubkey && selectedLedger.authority !== currentSignerPubkey,
   );
 
-  const loadRecords = async () => {
+  const loadRecords = useCallback(async () => {
     if (!service) {
       setLoading(false);
       return;
@@ -160,9 +158,9 @@ export default function WorkflowPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [service]);
 
-  const loadContextModel = async () => {
+  const loadContextModel = useCallback(async () => {
     if (!activeWorkspaceId) {
       setWorkspaceLedgerLinks([]);
       setCustomerLinks([]);
@@ -176,7 +174,7 @@ export default function WorkflowPage() {
 
     setWorkspaceLedgerLinks(nextLedgerLinks);
     setCustomerLinks(nextCustomerLinks);
-  };
+  }, [activeWorkspaceId]);
 
   const persistPostingLines = async (
     journalEntryId: number,
@@ -212,11 +210,11 @@ export default function WorkflowPage() {
 
   useEffect(() => {
     void loadRecords();
-  }, [service]);
+  }, [loadRecords]);
 
   useEffect(() => {
     void loadContextModel();
-  }, [activeWorkspaceId]);
+  }, [loadContextModel]);
 
   useEffect(() => {
     if (!selectedInvoice || !service) {

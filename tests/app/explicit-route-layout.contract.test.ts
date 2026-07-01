@@ -7,7 +7,6 @@ const removedPages = [
   "src/app/app/invoices/page.tsx",
   "src/app/app/ledgers/page.tsx",
   "src/app/app/ledgers/[ledgerId]/accounting/page.tsx",
-  "src/app/app/settlements/page.tsx",
   "src/app/app/timeline/page.tsx",
   "src/app/app/workflow/page.tsx",
   "src/app/app/vendor-supplier/page.tsx",
@@ -31,6 +30,11 @@ assert.deepEqual(duplicateSidebarHrefs, [], "sidebar nav hrefs must be unique be
 const invoices = readFileSync(resolve("src/app/app/vendor-supplier/invoices/page.tsx"), "utf8");
 assert.ok(invoices.includes("`/app/vendor-supplier/customers/${customer.pubkey}`"));
 assert.ok(!invoices.includes("`/app/customers/${customer.pubkey}`"));
+assert.ok(invoices.includes("`/app/vendor-supplier/settlements?invoice=${row.pubkey}`"));
+assert.ok(!invoices.includes("`/app/settlements?invoice=${row.pubkey}`"));
+
+const settlementsRedirect = readFileSync(resolve("src/app/app/settlements/page.tsx"), "utf8");
+assert.ok(settlementsRedirect.includes('redirect("/app/vendor-supplier/settlements")'));
 
 const customerDetail = readFileSync(
   resolve("src/app/app/vendor-supplier/customers/[pubkey]/page.tsx"),
