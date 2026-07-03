@@ -1,74 +1,34 @@
-import type { Session, User } from "@supabase/supabase-js";
-import { isSupabaseConfigured, supabase as configuredSupabase } from "@/lib/supabase/client";
+import type { AuthSession } from "@/lib/auth/session-types";
+import { authApi } from "@/lib/api-client/v1/auth";
 
-type AuthChangeCallback = (event: string, session: Session | null) => void;
-type ConfiguredSessionResult = Awaited<ReturnType<typeof configuredSupabase.auth.getSession>>;
+type AuthChangeCallback = (event: string, session: AuthSession | null) => void;
+type SessionResult = { data: { session: AuthSession | null }; error: null };
 
-const LOCAL_SESSION_KEY = "ar:local-auth:session";
-const INVALID_REFRESH_TOKEN_MESSAGES = ["Invalid Refresh Token", "Refresh Token Not Found"];
-
-function isInvalidRefreshTokenError(error: unknown): boolean {
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === "object" && error && "message" in error
-        ? String(error.message)
-        : String(error ?? "");
-
-  return INVALID_REFRESH_TOKEN_MESSAGES.some((candidate) => message.includes(candidate));
+async function getConfiguredSession(): Promise<SessionResult> {
+  const payload = await authApi.getSession().catch(() => ({ session: null as AuthSession | null }));
+  const session = (payload as { session?: AuthSession | null }).session ?? null;
+  return { data: { session }, error: null };
 }
 
-async function clearInvalidRefreshTokenSession(error: unknown): Promise<boolean> {
-  if (!isInvalidRefreshTokenError(error)) return false;
-
-  await configuredSupabase.auth.signOut({ scope: "local" }).catch(() => undefined);
-  return true;
-}
-
-async function getConfiguredSession(): Promise<ConfiguredSessionResult> {
-  try {
-    const result = await configuredSupabase.auth.getSession();
-    if (result.error && (await clearInvalidRefreshTokenSession(result.error))) {
-      return { data: { session: null }, error: null };
-    }
-    return result;
-  } catch (error) {
-    if (await clearInvalidRefreshTokenSession(error)) {
-      return { data: { session: null }, error: null };
-    }
-    throw error;
-  }
-}
-
-function readLocalSession(): Session | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(LOCAL_SESSION_KEY);
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as { id: string; email: string };
-    return { user: { id: parsed.id, email: parsed.email } as User } as Session;
-  } catch {
-    return null;
-  }
-}
-
-const localSupabase = {
+const apiBackedSupabase = {
   auth: {
-    async getSession() {
-      return { data: { session: readLocalSession() }, error: null };
+    async getSession(): Promise<SessionResult> {
+      return getConfiguredSession();
     },
     onAuthStateChange(callback: AuthChangeCallback) {
-      callback("INITIAL_SESSION", readLocalSession());
+      void getConfiguredSession().then(({ data }) => callback("INITIAL_SESSION", data.session));
       return { data: { subscription: { unsubscribe() {} } } };
     },
-    async signInWithPassword() {
-      return { data: { session: readLocalSession() }, error: null };
+    async signInWithPassword(credentials: { email: string; password: string }) {
+      const payload = await authApi.login(credentials.email, credentials.password);
+      return { data: { session: (payload.session ?? null) as AuthSession | null }, error: null };
     },
-    async signUp() {
-      return { data: { session: readLocalSession() }, error: null };
+    async signUp(credentials: { email: string; password: string }) {
+      const payload = await authApi.register(credentials.email, credentials.password);
+      return { data: { session: (payload.session ?? null) as AuthSession | null }, error: null };
     },
     async signOut() {
-      if (typeof window !== "undefined") window.localStorage.removeItem(LOCAL_SESSION_KEY);
+      await authApi.logout();
       return { error: null };
     },
   },
@@ -104,22 +64,6 @@ const localSupabase = {
     };
     return builder;
   },
-} as unknown as typeof configuredSupabase;
+};
 
-const configuredAuth = new Proxy(configuredSupabase.auth, {
-  get(target, property, receiver) {
-    if (property === "getSession") return getConfiguredSession;
-    const value = Reflect.get(target, property, receiver);
-    return typeof value === "function" ? value.bind(target) : value;
-  },
-}) as typeof configuredSupabase.auth;
-
-const configuredSessionClient = new Proxy(configuredSupabase, {
-  get(target, property, receiver) {
-    if (property === "auth") return configuredAuth;
-    const value = Reflect.get(target, property, receiver);
-    return typeof value === "function" ? value.bind(receiver) : value;
-  },
-}) as typeof configuredSupabase;
-
-export const supabase = isSupabaseConfigured ? configuredSessionClient : localSupabase;
+export const supabase: any = apiBackedSupabase;

@@ -1,8 +1,15 @@
-import type { PublicKey } from "@solana/web3.js";
-import type { EmbeddedWallet } from "@/lib/solana/embedded-wallet";
-import { accountingEngineService } from "@/services/accounting-engine-service";
+import { accountingEngineService } from "@/lib/api-client/v1/accounting";
 
-export async function assertAccountingDelegateContract(wallet: EmbeddedWallet, ledger: PublicKey, facilitator: PublicKey) {
+type EmbeddedWalletRef = {
+  id: string;
+  publicKey: string;
+};
+
+export async function assertAccountingDelegateContract(
+  wallet: EmbeddedWalletRef,
+  ledger: string,
+  facilitator: string,
+) {
   const status = await accountingEngineService.getPostingDelegateStatus(ledger, facilitator);
 
   status.active satisfies boolean;

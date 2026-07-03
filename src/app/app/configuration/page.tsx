@@ -7,7 +7,8 @@ import { useWorkspace } from "@/context/workspace-context";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useRoleGate } from "@/hooks/use-role-gate";
 import { supabase } from "@/lib/api-client/v1/session-client";
-import { env } from "@/lib/config/env";
+import { resolveApiBasePath } from "@/lib/api-client/v1/config";
+import { dispatchReloginRequired, RELOGIN_WARNING_MESSAGE } from "@/lib/auth/relogin-warning";
 import type { WalletUsage, WorkspaceWallet } from "@/lib/types/wallet";
 import { clampText } from "@/lib/utils/format";
 
@@ -32,6 +33,15 @@ async function getAuthToken(): Promise<string | null> {
     data: { session },
   } = await supabase.auth.getSession();
   return session?.access_token ?? null;
+}
+
+function buildMutationHeaders(token: string): HeadersInit {
+  return {
+    "content-type": "application/json",
+    authorization: `Bearer ${token}`,
+    "x-request-id": `req_${crypto.randomUUID()}`,
+    "idempotency-key": `idem_${crypto.randomUUID()}`,
+  };
 }
 
 export default function ConfigurationPage() {
@@ -63,14 +73,15 @@ export default function ConfigurationPage() {
   const canCreateWallet = hasWorkspace && (canWriteTransactions || wallets.length === 0);
 
   const loadWallets = useCallback(async () => {
-    if (!activeWorkspaceId || !env.supabaseUrl || !env.supabaseAnonKey) {
+    if (!activeWorkspaceId) {
       setWallets([]);
       return;
     }
 
     const token = await getAuthToken();
     if (!token) {
-      setError("Authentication token is missing.");
+      setError(RELOGIN_WARNING_MESSAGE);
+      dispatchReloginRequired();
       return;
     }
 
@@ -78,18 +89,26 @@ export default function ConfigurationPage() {
     setError(null);
     try {
       const response = await fetch(
-        `/api/wallets?workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
+        resolveApiBasePath(`/api/v1/platform/workspaces/${encodeURIComponent(activeWorkspaceId)}/wallets`),
         {
           headers: {
             authorization: `Bearer ${token}`,
           },
         },
       );
-      const data = (await response.json()) as { wallets?: WorkspaceWallet[]; error?: string };
+      const data = (await response.json()) as {
+        data?: { wallets?: WorkspaceWallet[] };
+        wallets?: WorkspaceWallet[];
+        error?: { message?: string } | string;
+      };
       if (!response.ok) {
-        throw new Error(data.error ?? "Failed to load wallets.");
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : data.error?.message ?? "Failed to load wallets.",
+        );
       }
-      setWallets(data.wallets ?? []);
+      setWallets(data.data?.wallets ?? data.wallets ?? []);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to load wallets.");
     } finally {
@@ -107,8 +126,9 @@ export default function ConfigurationPage() {
       const token = await getAuthToken();
       if (!token) {
         if (!options?.silent) {
-          setError("Authentication token is missing.");
+          setError(RELOGIN_WARNING_MESSAGE);
         }
+        dispatchReloginRequired();
         return false;
       }
 
@@ -116,25 +136,39 @@ export default function ConfigurationPage() {
         setError(null);
       }
 
-      const response = await fetch("/api/wallets/balances/refresh", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ workspaceId: activeWorkspaceId }),
-      });
+      let response: Response;
+      try {
+        response = await fetch(resolveApiBasePath(`/api/v1/platform/workspaces/${encodeURIComponent(activeWorkspaceId)}/wallet-balances/refresh`), {
+          method: "POST",
+          headers: buildMutationHeaders(token),
+          body: JSON.stringify({}),
+        });
+      } catch (error) {
+        if (!options?.silent) {
+          setError(error instanceof Error ? error.message : "Failed to refresh balances.");
+        }
+        return false;
+      }
 
-      const data = (await response.json()) as { snapshots?: unknown[]; error?: string };
+      const data = (await response.json()) as {
+        data?: { snapshots?: unknown[] };
+        snapshots?: unknown[];
+        error?: { message?: string } | string;
+      };
       if (!response.ok) {
         if (!options?.silent) {
-          setError(data.error ?? "Failed to refresh balances.");
+          setError(
+            typeof data.error === "string"
+              ? data.error
+              : data.error?.message ?? "Failed to refresh balances.",
+          );
         }
         return false;
       }
 
       if (!options?.silent) {
-        setMessage(`Balance refresh completed for ${data.snapshots?.length ?? 0} wallet(s).`);
+        const snapshots = data.data?.snapshots ?? data.snapshots ?? [];
+        setMessage(`Balance refresh completed for ${snapshots.length} wallet(s).`);
       }
 
       await loadWallets();
@@ -167,7 +201,8 @@ export default function ConfigurationPage() {
     if (!activeWorkspaceId) return;
     const token = await getAuthToken();
     if (!token) {
-      setError("Authentication token is missing.");
+      setError(RELOGIN_WARNING_MESSAGE);
+      dispatchReloginRequired();
       return;
     }
 
@@ -175,27 +210,28 @@ export default function ConfigurationPage() {
     setMessage(null);
     setExportedPrivateKey(null);
 
-    const response = await fetch("/api/wallets", {
+    const response = await fetch(resolveApiBasePath(`/api/v1/platform/workspaces/${encodeURIComponent(activeWorkspaceId)}/wallets`), {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`,
-      },
+      headers: buildMutationHeaders(token),
       body: JSON.stringify({
-        workspaceId: activeWorkspaceId,
         usage: createUsage,
         source: "rotate",
         setAsMain,
       }),
     });
 
-    const data = (await response.json()) as { wallet?: WorkspaceWallet; error?: string };
+    const data = (await response.json()) as {
+      data?: { wallet?: WorkspaceWallet };
+      wallet?: WorkspaceWallet;
+      error?: { message?: string } | string;
+    };
     if (!response.ok) {
-      setError(data.error ?? "Failed to create wallet.");
+      setError(typeof data.error === "string" ? data.error : data.error?.message ?? "Failed to create wallet.");
       return;
     }
 
-    setMessage(`Created wallet ${clampText(data.wallet?.publicKey ?? "", 20)}.`);
+    const wallet = data.data?.wallet ?? data.wallet;
+    setMessage(`Created wallet ${clampText(wallet?.publicKey ?? "", 20)}.`);
     setSetAsMain(false);
     await loadWallets();
     regenerateWallet();
@@ -213,7 +249,8 @@ export default function ConfigurationPage() {
 
     const token = await getAuthToken();
     if (!token) {
-      setError("Authentication token is missing.");
+      setError(RELOGIN_WARNING_MESSAGE);
+      dispatchReloginRequired();
       return;
     }
 
@@ -223,26 +260,31 @@ export default function ConfigurationPage() {
     setExportedPrivateKey(null);
 
     try {
-      const response = await fetch("/api/wallets/import-legacy", {
+      const response = await fetch(resolveApiBasePath(`/api/v1/platform/workspaces/${encodeURIComponent(activeWorkspaceId)}/wallets/import`), {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${token}`,
-        },
+        headers: buildMutationHeaders(token),
         body: JSON.stringify({
-          workspaceId: activeWorkspaceId,
           publicKey,
           privateKey,
           setAsMain: importSetAsMain,
         }),
       });
 
-      const data = (await response.json()) as { wallet?: WorkspaceWallet; error?: string };
+      const data = (await response.json()) as {
+        data?: { wallet?: WorkspaceWallet };
+        wallet?: WorkspaceWallet;
+        error?: { message?: string } | string;
+      };
       if (!response.ok) {
-        throw new Error(data.error ?? "Failed to import wallet.");
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : data.error?.message ?? "Failed to import wallet.",
+        );
       }
 
-      setMessage(`Imported wallet ${clampText(data.wallet?.publicKey ?? publicKey, 20)}.`);
+      const wallet = data.data?.wallet ?? data.wallet;
+      setMessage(`Imported wallet ${clampText(wallet?.publicKey ?? publicKey, 20)}.`);
       setImportPublicKey("");
       setImportPrivateKey("");
       setImportSetAsMain(false);
@@ -259,23 +301,21 @@ export default function ConfigurationPage() {
     if (!activeWorkspaceId) return;
     const token = await getAuthToken();
     if (!token) {
-      setError("Authentication token is missing.");
+      setError(RELOGIN_WARNING_MESSAGE);
+      dispatchReloginRequired();
       return;
     }
 
     setError(null);
-    const response = await fetch("/api/wallets/main", {
+    const response = await fetch(resolveApiBasePath(`/api/v1/platform/workspaces/${encodeURIComponent(activeWorkspaceId)}/wallets/${encodeURIComponent(walletId)}/main`), {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ workspaceId: activeWorkspaceId, walletId }),
+      headers: buildMutationHeaders(token),
+      body: JSON.stringify({}),
     });
 
-    const data = (await response.json()) as { error?: string };
+    const data = (await response.json()) as { error?: { message?: string } | string };
     if (!response.ok) {
-      setError(data.error ?? "Failed to set main wallet.");
+      setError(typeof data.error === "string" ? data.error : data.error?.message ?? "Failed to set main wallet.");
       return;
     }
 
@@ -292,26 +332,32 @@ export default function ConfigurationPage() {
     if (!activeWorkspaceId) return;
     const token = await getAuthToken();
     if (!token) {
-      setError("Authentication token is missing.");
+      setError(RELOGIN_WARNING_MESSAGE);
+      dispatchReloginRequired();
       return;
     }
 
     setError(null);
-    const response = await fetch("/api/wallets/export", {
+    const response = await fetch(resolveApiBasePath(`/api/v1/platform/workspaces/${encodeURIComponent(activeWorkspaceId)}/wallets/${encodeURIComponent(walletId)}/export`), {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ workspaceId: activeWorkspaceId, walletId }),
+      headers: buildMutationHeaders(token),
+      body: JSON.stringify({}),
     });
-    const data = (await response.json()) as { privateKey?: string; error?: string };
+    const data = (await response.json()) as {
+      data?: { privateKey?: string };
+      privateKey?: string;
+      error?: { message?: string } | string;
+    };
     if (!response.ok) {
-      setError(data.error ?? "Failed to export private key.");
+      setError(
+        typeof data.error === "string"
+          ? data.error
+          : data.error?.message ?? "Failed to export private key.",
+      );
       return;
     }
 
-    setExportedPrivateKey(data.privateKey ?? null);
+    setExportedPrivateKey(data.data?.privateKey ?? data.privateKey ?? null);
     setMessage("Private key exported (raw) for current stage workflow.");
   };
 

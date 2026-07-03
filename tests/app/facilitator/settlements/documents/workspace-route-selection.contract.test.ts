@@ -19,7 +19,7 @@ assertIncludes(
 assertIncludes(documentsPage, "workspaceRoutePdas", "documents page derives workspace route PDA set");
 assertIncludes(
   documentsPage,
-  "route.facilitator === wallet.publicKey.toBase58()",
+  "route.facilitator === wallet.publicKey",
   "route selector requires current facilitator ownership",
 );
 assertIncludes(documentsPage, "[activeWorkspaceId, service, wallet]", "route selector reloads on workspace or wallet change");
@@ -27,8 +27,7 @@ assertIncludes(documentsPage, "[activeWorkspaceId, service, wallet]", "route sel
 assertIncludes(routesPage, "useWorkspace", "route creation reads current workspace");
 assertIncludes(routesPage, "service.getRoute(pubkey)", "route creation reloads persisted route metadata");
 assertIncludes(routesPage, "upsertWorkspaceSettlementRoute", "new route linked to current workspace");
-assertIncludes(routesPage, "deriveSettlementRoutePda(wallet.publicKey, routeCode)", "route creation detects existing deterministic route");
-assertIncludes(routesPage, "service.getRoute(derivedRoute.toBase58())", "orphaned route loaded before create retry");
+assertIncludes(routesPage, "rows.find((route) => route.routeCode === routeCode)", "route creation checks existing API-fetched route by code");
 assertIncludes(routesPage, "setRows((current)", "created or recovered route inserted into visible inventory immediately");
 assertIncludes(
   routesPage,
@@ -38,7 +37,7 @@ assertIncludes(
 assertIncludes(routesPage, "workspaceRoutePdas", "route inventory derives active workspace route PDAs");
 assertIncludes(
   routesPage,
-  "route.facilitator === wallet.publicKey.toBase58()",
+  "route.facilitator === wallet.publicKey",
   "route inventory requires current facilitator ownership",
 );
 assertIncludes(routesPage, "[activeWorkspaceId, service, wallet]", "route inventory reloads on workspace or wallet change");

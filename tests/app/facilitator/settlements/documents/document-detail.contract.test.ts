@@ -23,11 +23,11 @@ for (const expected of [
   "listWorkspaceSettlementRoutes(activeWorkspaceId)",
   'link.status === "active"',
   "link.routePda === nextDocument.route",
-  "nextRoute.facilitator !== wallet.publicKey.toBase58()",
-  "deriveVendorInvoicePda(new PublicKey(nextRoute.buyerApLedger), nextDocument.invoiceNo)",
-  "deriveInvoicePda(new PublicKey(nextRoute.supplierArLedger), nextDocument.invoiceNo)",
-  "apService.getVendorInvoice(buyerInvoicePda.toBase58())",
-  "arService.getInvoice(supplierInvoicePda.toBase58())",
+  "nextRoute.facilitator !== wallet.publicKey",
+  "apService.listVendorInvoices()",
+  "arService.listInvoices()",
+  "invoice.ledger === nextRoute.buyerApLedger",
+  "invoice.ledger === nextRoute.supplierArLedger",
   "compareSettlementInvoice",
 ]) {
   assert.ok(detailPage.includes(expected), `detail page must include ${expected}`);

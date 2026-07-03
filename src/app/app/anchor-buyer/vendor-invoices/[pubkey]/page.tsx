@@ -46,8 +46,8 @@ export default function VendorInvoiceDetailPage() {
     }
 
     const [nextInvoice, buyerLedgers, buyerLedgerLinks, workspaceLedgerLinks] = await Promise.all([
-      service.getVendorInvoice(params.pubkey),
-      service.listBuyerLedgers(),
+      service.getVendorInvoice(activeWorkspaceId, params.pubkey),
+      service.listBuyerLedgers(activeWorkspaceId),
       controlPlaneService.listBuyerLedgerLinks(activeWorkspaceId),
       controlPlaneService.listLedgerLinks(activeWorkspaceId),
     ]);
@@ -69,8 +69,8 @@ export default function VendorInvoiceDetailPage() {
     }
 
     const [paymentRows, vendors] = await Promise.all([
-      service.listVendorPayments(params.pubkey),
-      service.listVendors(nextInvoice.ledger),
+      service.listVendorPayments(activeWorkspaceId, params.pubkey),
+      service.listVendors({ workspaceId: activeWorkspaceId, ledgerPubkey: nextInvoice.ledger }),
     ]);
     setInvoice(nextInvoice);
     setPayments(paymentRows);
@@ -90,6 +90,7 @@ export default function VendorInvoiceDetailPage() {
     setMessage(null);
     try {
       const pubkey = await service.payVendorInvoice({
+        workspaceId: activeWorkspaceId,
         ledgerPubkey: invoice.ledger,
         vendorPubkey: invoice.vendor,
         invoicePubkey: invoice.pubkey,
@@ -127,6 +128,9 @@ export default function VendorInvoiceDetailPage() {
         <>
           <section className="rounded-lg border border-slate-200 bg-white p-3 text-[11px] text-slate-600 shadow-sm">
             <p className="font-semibold text-slate-900">{invoice.invoiceNo}</p>
+            <p className="mt-2">
+              Invoice PDA <span className="break-all font-mono text-[10px] text-slate-700">{invoice.pubkey}</span>
+            </p>
             <div className="mt-2 grid gap-2 md:grid-cols-2">
               <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
                 <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Buyer</p>

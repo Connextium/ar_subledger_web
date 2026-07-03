@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "@/components/records/data-table";
 import { SearchBar } from "@/components/records/search-bar";
 import { useWorkingContext } from "@/context/working-context";
+import { useWorkspace } from "@/context/workspace-context";
 import { PageTitle } from "@/components/ui/page-title";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
 import type { ActivityItem, InvoiceRecord } from "@/lib/types/domain";
@@ -15,6 +16,7 @@ import { controlPlaneService } from "@/lib/api-client/v1/platform";
 export default function TimelinePage() {
   const service = useArSubledger();
   const searchParams = useSearchParams();
+  const { selectedWorkspaceId } = useWorkspace();
   const { workspaceId, ledgerPda: contextLedgerPda, customerId: contextCustomerId } = useWorkingContext();
 
   const ledgerParam = searchParams.get("ledger");
@@ -22,6 +24,7 @@ export default function TimelinePage() {
 
   const activeLedgerPda = ledgerParam ?? contextLedgerPda;
   const selectedCustomerScope = customerParam ?? contextCustomerId;
+  const activeWorkspaceId = workspaceId ?? selectedWorkspaceId;
 
   const [rows, setRows] = useState<ActivityItem[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
@@ -38,7 +41,7 @@ export default function TimelinePage() {
         return;
       }
 
-      if (!workspaceId) {
+      if (!activeWorkspaceId) {
         setScopedCustomerPubkeys([selectedCustomerScope]);
         setScopeLoading(false);
         return;
@@ -47,7 +50,7 @@ export default function TimelinePage() {
       setScopeLoading(true);
       try {
         const links = await controlPlaneService.listWorkspaceCustomerLedgerLinks({
-          workspaceId,
+          workspaceId: activeWorkspaceId,
           workspaceCustomerId: selectedCustomerScope,
         });
 
@@ -66,7 +69,7 @@ export default function TimelinePage() {
     };
 
     void resolveScope();
-  }, [activeLedgerPda, selectedCustomerScope, workspaceId]);
+  }, [activeLedgerPda, activeWorkspaceId, selectedCustomerScope]);
 
   useEffect(() => {
     const run = async () => {
@@ -82,22 +85,35 @@ export default function TimelinePage() {
         return;
       }
 
+      if (!activeWorkspaceId) {
+        setRows([]);
+        setInvoices([]);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
         const [activityRows, invoiceRows] = await Promise.all([
-          service.listActivity(),
-          service.listInvoices(activeLedgerPda ?? undefined),
+          service.listActivity(activeWorkspaceId),
+          service.listInvoices({
+            workspaceId: activeWorkspaceId,
+            ledgerPda: activeLedgerPda ?? undefined,
+          }),
         ]);
 
         setRows(activityRows);
         setInvoices(invoiceRows);
+      } catch {
+        setRows([]);
+        setInvoices([]);
       } finally {
         setLoading(false);
       }
     };
 
     void run();
-  }, [activeLedgerPda, selectedCustomerScope, service]);
+  }, [activeLedgerPda, activeWorkspaceId, selectedCustomerScope, service]);
 
   const rowsByCustomer = useMemo(() => {
     if (!selectedCustomerScope) return [];

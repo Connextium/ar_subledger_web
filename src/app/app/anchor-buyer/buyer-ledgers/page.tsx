@@ -36,7 +36,7 @@ export default function BuyerLedgersPage() {
 
     let cancelled = false;
     void Promise.all([
-      service.listBuyerLedgers(),
+      service.listBuyerLedgers(activeWorkspaceId),
       controlPlaneService.listBuyerLedgerLinks(activeWorkspaceId),
       controlPlaneService.listLedgerLinks(activeWorkspaceId),
     ])
@@ -64,11 +64,20 @@ export default function BuyerLedgersPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const ledgers = await accountingEngineService.listLedgersByAuthority(wallet.publicKey);
+        if (!activeWorkspaceId) {
+          setAccountingLedgers([]);
+          setAccountingLedgerPubkey("");
+          return;
+        }
+
+        const ledgers = await accountingEngineService.listLedgersByAuthority({
+          workspaceId: activeWorkspaceId,
+          authority: wallet.publicKey,
+        });
         if (cancelled) return;
 
         setAccountingLedgers(ledgers);
-        setAccountingLedgerPubkey((current) => current || ledgers[0]?.publicKey.toBase58() || "");
+        setAccountingLedgerPubkey((current) => current || ledgers[0]?.pubkey || "");
       } catch (error) {
         if (cancelled) return;
         setMessage(error instanceof Error ? error.message : String(error));
@@ -78,7 +87,7 @@ export default function BuyerLedgersPage() {
     return () => {
       cancelled = true;
     };
-  }, [wallet]);
+  }, [activeWorkspaceId, wallet]);
 
   async function handleCreate() {
     if (!service || !wallet) return;
@@ -89,6 +98,7 @@ export default function BuyerLedgersPage() {
         throw new Error("Select a workspace before creating a Buyer Ledger.");
       }
       const pubkey = await service.initializeBuyerLedger({
+        workspaceId: activeWorkspaceId,
         ledgerCode,
         accountingLedgerPubkey,
         apControlAccountCode: Number(apControlAccountCode),
@@ -99,7 +109,7 @@ export default function BuyerLedgersPage() {
         workspaceId: activeWorkspaceId,
         ledgerPda: pubkey,
         ledgerCode,
-        authorityPubkey: wallet.publicKey.toBase58(),
+        authorityPubkey: wallet.publicKey,
         accountingLedgerKey: accountingLedgerPubkey,
       });
       setMessage(`Created buyer ledger ${pubkey}`);
@@ -140,8 +150,8 @@ export default function BuyerLedgersPage() {
             >
               <option value="">Select accounting ledger</option>
               {accountingLedgers.map((ledger) => {
-                const pubkey = ledger.publicKey.toBase58();
-                const code = ledger.account.ledgerCode || "(no code)";
+                const pubkey = ledger.pubkey || "";
+                const code = ledger.account?.ledgerCode || ledger.ledgerCode || "(no code)";
                 return (
                   <option key={pubkey} value={pubkey}>
                     {code} ({pubkey})

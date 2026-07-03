@@ -55,7 +55,10 @@ export function ContextBar() {
             <option value="">Select supplier ledger</option>
             {ledgerOptions.map((ledger) => (
               <option key={ledger.ledgerPda} value={ledger.ledgerPda}>
-                {ledger.ledgerCode}
+                {(ledger.ledgerCode && ledger.ledgerCode.trim().length > 0
+                  ? ledger.ledgerCode
+                  : `AR Ledger ${ledger.ledgerPda.slice(0, 8)}...`) +
+                  ` (${ledger.ledgerPda.slice(0, 8)}...)`}
               </option>
             ))}
           </select>

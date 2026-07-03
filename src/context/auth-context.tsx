@@ -1,13 +1,13 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/lib/api-client/v1/session-client";
-import { env } from "@/lib/config/env";
+import type { AuthSession, AuthUser } from "@/lib/auth/session-types";
+import { authApi } from "@/lib/api-client/v1/auth";
+import { RELOGIN_REQUIRED_EVENT } from "@/lib/auth/relogin-warning";
 
 type AuthContextValue = {
-  user: User | null;
-  session: Session | null;
+  user: AuthUser | null;
+  session: AuthSession | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
@@ -16,84 +16,39 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const MOCK_EMAIL = "localnet@embedded.wallet";
-const LOCAL_USERS_KEY = "ar:local-auth:users";
-const LOCAL_SESSION_KEY = "ar:local-auth:session";
-
-type LocalAuthUser = {
-  id: string;
-  email: string;
-  password: string;
-};
-
-function readLocalUsers(): LocalAuthUser[] {
-  if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(LOCAL_USERS_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as LocalAuthUser[];
-  } catch {
-    return [];
-  }
-}
-
-function writeLocalUsers(users: LocalAuthUser[]): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
-}
-
-function readLocalSessionUser(): User | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(LOCAL_SESSION_KEY);
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as { id: string; email: string };
-    return { id: parsed.id, email: parsed.email } as User;
-  } catch {
-    return null;
-  }
-}
-
-function writeLocalSessionUser(user: User | null): void {
-  if (typeof window === "undefined") return;
-  if (!user) {
-    window.localStorage.removeItem(LOCAL_SESSION_KEY);
-    return;
-  }
-  window.localStorage.setItem(
-    LOCAL_SESSION_KEY,
-    JSON.stringify({ id: user.id, email: user.email ?? MOCK_EMAIL }),
-  );
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!env.supabaseUrl || !env.supabaseAnonKey) {
-      const localUser = readLocalSessionUser();
-      if (localUser) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setSession({ user: localUser } as Session);
-      } else {
-        setSession(null);
-      }
-      setLoading(false);
+    authApi
+      .getSession()
+      .then(({ session: nextSession }) => {
+        setSession(nextSession ?? null);
+      })
+      .finally(() => setLoading(false));
+
+    return;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
       return;
     }
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session ?? null);
+    const handleReloginRequired = () => {
+      setSession(null);
       setLoading(false);
-    });
 
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setLoading(false);
-    });
+      if (window.location.pathname !== "/login") {
+        window.location.replace("/login?reason=reauth");
+      }
+    };
 
-    return () => data.subscription.unsubscribe();
+    window.addEventListener(RELOGIN_REQUIRED_EVENT, handleReloginRequired as EventListener);
+    return () => {
+      window.removeEventListener(RELOGIN_REQUIRED_EVENT, handleReloginRequired as EventListener);
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -102,52 +57,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session,
       loading,
       async signIn(email, password) {
-        if (!env.supabaseUrl || !env.supabaseAnonKey) {
-          const users = readLocalUsers();
-          const existing = users.find(
-            (candidate) => candidate.email.toLowerCase() === email.toLowerCase().trim(),
-          );
-          if (!existing || existing.password !== password) {
-            throw new Error("Invalid email or password.");
-          }
-          const user = { id: existing.id, email: existing.email } as User;
-          writeLocalSessionUser(user);
-          setSession({ user } as Session);
-          return;
-        }
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        const { session: nextSession } = await authApi.login(email, password);
+        setSession(nextSession ?? null);
       },
       async signUp(email, password) {
-        if (!env.supabaseUrl || !env.supabaseAnonKey) {
-          const users = readLocalUsers();
-          const normalizedEmail = email.toLowerCase().trim();
-          if (users.some((candidate) => candidate.email.toLowerCase() === normalizedEmail)) {
-            throw new Error("Email already registered.");
-          }
-          const userRecord: LocalAuthUser = {
-            id: crypto.randomUUID(),
-            email: normalizedEmail,
-            password,
-          };
-          users.push(userRecord);
-          writeLocalUsers(users);
-          const user = { id: userRecord.id, email: userRecord.email } as User;
-          writeLocalSessionUser(user);
-          setSession({ user } as Session);
-          return;
-        }
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
+        const { session: nextSession } = await authApi.register(email, password);
+        setSession(nextSession ?? null);
       },
       async signOut() {
-        if (!env.supabaseUrl || !env.supabaseAnonKey) {
-          writeLocalSessionUser(null);
-          setSession(null);
-          return;
-        }
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
+        await authApi.logout();
+        setSession(null);
       },
     }),
     [loading, session],

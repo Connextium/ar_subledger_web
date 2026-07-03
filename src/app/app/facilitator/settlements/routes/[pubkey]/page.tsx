@@ -3,14 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
-import type { BuyerLedgerRecord, LedgerRecord, SettlementRouteRecord } from "@/lib/types/domain";
+import type { BuyerLedgerRecord, LedgerRecord, SettlementDocumentRecord, SettlementRouteRecord } from "@/lib/types/domain";
 import { accountingEngineService, type AccountingLedger } from "@/lib/api-client/v1/accounting";
 import { createApSubledgerService } from "@/lib/api-client/v1/buyer";
 import { createArSubledgerService } from "@/lib/api-client/v1/supplier";
 import { createSettlementFacilitatorService } from "@/lib/api-client/v1/facilitator";
+import { formatLamportsAmount } from "@/lib/utils/format";
 
 function LedgerIdentity({ label, code, pubkey }: { label: string; code?: string | null; pubkey: string }) {
   return (
@@ -33,6 +33,7 @@ export default function SettlementRouteDetailPage() {
   const [supplierArLedger, setSupplierArLedger] = useState<LedgerRecord | null>(null);
   const [buyerBaseGl, setBuyerBaseGl] = useState<AccountingLedger | null>(null);
   const [supplierBaseGl, setSupplierBaseGl] = useState<AccountingLedger | null>(null);
+  const [documents, setDocuments] = useState<SettlementDocumentRecord[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -48,25 +49,48 @@ export default function SettlementRouteDetailPage() {
       try {
         setLoading(true);
         setMessage(null);
+        setBuyerApLedger(null);
+        setSupplierArLedger(null);
+        setBuyerBaseGl(null);
+        setSupplierBaseGl(null);
+        setDocuments([]);
+
         const nextRoute = await service.getRoute(params.pubkey);
         if (!nextRoute) {
           if (!cancelled) setRoute(null);
           return;
         }
 
-        const [nextBuyerAp, nextSupplierAr, nextBuyerGl, nextSupplierGl] = await Promise.all([
+        if (!cancelled) {
+          setRoute(nextRoute);
+        }
+
+        const [nextBuyerAp, nextSupplierAr, nextBuyerGl, nextSupplierGl, nextDocuments] = await Promise.allSettled([
           apService.getBuyerLedger(nextRoute.buyerApLedger),
           arService.getLedger(nextRoute.supplierArLedger),
-          accountingEngineService.getLedger(new PublicKey(nextRoute.buyerAccountingLedger)),
-          accountingEngineService.getLedger(new PublicKey(nextRoute.supplierAccountingLedger)),
+          accountingEngineService.getLedger(nextRoute.buyerAccountingLedger),
+          accountingEngineService.getLedger(nextRoute.supplierAccountingLedger),
+          service.listDocuments(),
         ]);
 
         if (cancelled) return;
-        setRoute(nextRoute);
-        setBuyerApLedger(nextBuyerAp);
-        setSupplierArLedger(nextSupplierAr);
-        setBuyerBaseGl(nextBuyerGl);
-        setSupplierBaseGl(nextSupplierGl);
+
+        setBuyerApLedger(nextBuyerAp.status === "fulfilled" ? nextBuyerAp.value : null);
+        setSupplierArLedger(nextSupplierAr.status === "fulfilled" ? nextSupplierAr.value : null);
+        setBuyerBaseGl(nextBuyerGl.status === "fulfilled" ? nextBuyerGl.value : null);
+        setSupplierBaseGl(nextSupplierGl.status === "fulfilled" ? nextSupplierGl.value : null);
+        setDocuments(
+          nextDocuments.status === "fulfilled"
+            ? (nextDocuments.value as SettlementDocumentRecord[]).filter((document) => document.route === nextRoute.pubkey)
+            : [],
+        );
+
+        const lookupFailures = [nextBuyerAp, nextSupplierAr, nextBuyerGl, nextSupplierGl, nextDocuments].filter(
+          (result) => result.status === "rejected",
+        );
+        if (lookupFailures.length > 0) {
+          setMessage("Some linked ledger details are temporarily unavailable. Route details are shown with partial data.");
+        }
       } catch (error) {
         if (!cancelled) setMessage(error instanceof Error ? error.message : String(error));
       } finally {
@@ -127,6 +151,29 @@ export default function SettlementRouteDetailPage() {
                 code={supplierBaseGl?.account.ledgerCode}
                 pubkey={route.supplierAccountingLedger}
               />
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <h2 className="text-xs font-semibold text-slate-900">Documents In This Route</h2>
+            <div className="mt-2 space-y-2">
+              {documents.map((document) => (
+                <Link
+                  key={document.pubkey}
+                  href={`/app/facilitator/settlements/documents/${document.pubkey}`}
+                  className="block rounded-md border border-slate-200 px-3 py-2 text-[11px] text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                >
+                  <p className="font-semibold text-slate-900">{document.invoiceNo}</p>
+                  <p className="font-mono">{document.pubkey}</p>
+                  <p>
+                    Original {formatLamportsAmount(document.originalAmount, document.currency || "USD")} | Open{" "}
+                    {formatLamportsAmount(document.openAmount, document.currency || "USD")}
+                  </p>
+                </Link>
+              ))}
+              {documents.length === 0 ? (
+                <p className="text-[11px] text-slate-500">No documents found for this route.</p>
+              ) : null}
             </div>
           </section>
         </>

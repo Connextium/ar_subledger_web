@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
+import { RELOGIN_WARNING_MESSAGE } from "@/lib/auth/relogin-warning";
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signIn, signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,6 +18,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [error, setError] = useState<string | null>(null);
 
   const isLogin = mode === "login";
+  const showReloginWarning = isLogin && searchParams.get("reason") === "reauth";
 
   return (
     <div className="mx-auto w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -28,6 +31,12 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           ? "Use Supabase auth or local fallback mode when env vars are not configured."
           : "Register to access Localnet AR subledger workflow screens."}
       </p>
+
+      {showReloginWarning ? (
+        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+          {RELOGIN_WARNING_MESSAGE}
+        </p>
+      ) : null}
 
       <form
         className="mt-4 space-y-3"

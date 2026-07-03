@@ -37,7 +37,7 @@ export default function VendorsPage() {
 
     let cancelled = false;
     void Promise.all([
-      service.listBuyerLedgers(),
+      service.listBuyerLedgers(activeWorkspaceId),
       controlPlaneService.listBuyerLedgerLinks(activeWorkspaceId),
       controlPlaneService.listLedgerLinks(activeWorkspaceId),
     ])
@@ -64,7 +64,7 @@ export default function VendorsPage() {
 
     let cancelled = false;
     void service
-      .listVendors(ledgerPubkey)
+      .listVendors({ workspaceId: activeWorkspaceId, ledgerPubkey })
       .then((vendors) => {
         if (!cancelled) setRows(vendors);
       })
@@ -75,7 +75,7 @@ export default function VendorsPage() {
     return () => {
       cancelled = true;
     };
-  }, [service, ledgerPubkey]);
+  }, [activeWorkspaceId, service, ledgerPubkey]);
 
   async function handleCreate() {
     if (!service) return;
@@ -85,7 +85,7 @@ export default function VendorsPage() {
       if (!activeWorkspaceId) {
         throw new Error("Select a workspace before creating vendor metadata.");
       }
-      const pubkey = await service.createVendor({ ledgerPubkey, vendorCode, vendorName });
+      const pubkey = await service.createVendor({ workspaceId: activeWorkspaceId, ledgerPubkey, vendorCode, vendorName });
       const workspaceVendor = await controlPlaneService.createWorkspaceVendor({
         workspaceId: activeWorkspaceId,
         vendorRef: vendorCode,
@@ -102,7 +102,7 @@ export default function VendorsPage() {
       setMessage(`Created vendor ${pubkey}`);
       setVendorCode("");
       setVendorName("");
-      setRows(await service.listVendors(ledgerPubkey));
+      setRows(await service.listVendors({ workspaceId: activeWorkspaceId, ledgerPubkey }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {

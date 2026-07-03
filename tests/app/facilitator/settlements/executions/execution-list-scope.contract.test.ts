@@ -11,7 +11,7 @@ for (const expected of [
   "useWorkspace",
   "listWorkspaceSettlementRoutes(activeWorkspaceId)",
   'link.status === "active"',
-  "route.facilitator === wallet.publicKey.toBase58()",
+  "route.facilitator === wallet.publicKey",
   "workspaceRoutePdas.has(document.route)",
   "workspaceRoutePdas.has(execution.route)",
   "`/app/facilitator/settlements/executions/${row.pubkey}`",

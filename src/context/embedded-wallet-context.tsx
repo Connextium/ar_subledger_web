@@ -1,15 +1,19 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { EmbeddedWallet } from "@/lib/api-client/v1/embedded-wallet";
 import { useAuth } from "@/context/auth-context";
 import { useWorkspace } from "@/context/workspace-context";
-import { env } from "@/lib/config/env";
 import { supabase } from "@/lib/api-client/v1/session-client";
+import { resolveApiBasePath } from "@/lib/api-client/v1/config";
 import type { WorkspaceWallet } from "@/lib/types/wallet";
 
+type EmbeddedWalletRef = {
+  id: string;
+  publicKey: string;
+};
+
 type EmbeddedWalletContextValue = {
-  wallet: EmbeddedWallet | null;
+  wallet: EmbeddedWalletRef | null;
   loading: boolean;
   regenerateWallet: () => void;
 };
@@ -19,7 +23,7 @@ const EmbeddedWalletContext = createContext<EmbeddedWalletContextValue | null>(n
 export function EmbeddedWalletProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { selectedWorkspaceId } = useWorkspace();
-  const [wallet, setWallet] = useState<EmbeddedWallet | null>(null);
+  const [wallet, setWallet] = useState<EmbeddedWalletRef | null>(null);
   const [loading, setLoading] = useState(true);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -35,7 +39,6 @@ export function EmbeddedWalletProvider({ children }: { children: React.ReactNode
   }, [user]);
 
   useEffect(() => {
-    if (!env.supabaseUrl || !env.supabaseAnonKey) return;
     if (!user || !selectedWorkspaceId) {
       setWallet(null);
       setLoading(false);
@@ -57,7 +60,7 @@ export function EmbeddedWalletProvider({ children }: { children: React.ReactNode
         }
 
         const listResponse = await fetch(
-          `/api/wallets?workspaceId=${encodeURIComponent(selectedWorkspaceId)}`,
+          resolveApiBasePath(`/api/v1/platform/workspaces/${encodeURIComponent(selectedWorkspaceId)}/wallets`),
           {
             headers: {
               authorization: `Bearer ${accessToken}`,
@@ -70,38 +73,24 @@ export function EmbeddedWalletProvider({ children }: { children: React.ReactNode
           return;
         }
 
-        const listData = (await listResponse.json()) as { wallets?: WorkspaceWallet[] };
+        const listData = (await listResponse.json()) as {
+          data?: { wallets?: WorkspaceWallet[] };
+          wallets?: WorkspaceWallet[];
+        };
+        const wallets = listData.data?.wallets ?? listData.wallets ?? [];
         const candidate =
-          listData.wallets?.find((row) => row.isMain && row.status === "active") ?? null;
+          wallets.find((row) => row.isMain && row.status === "active") ?? null;
 
         if (!candidate) {
           if (!cancelled) setWallet(null);
           return;
         }
 
-        const exportResponse = await fetch("/api/wallets/export", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({ workspaceId: selectedWorkspaceId, walletId: candidate.id }),
-        });
-
-        if (!exportResponse.ok) {
-          if (!cancelled) setWallet(null);
-          return;
-        }
-
-        const exportData = (await exportResponse.json()) as { privateKey?: string };
-        if (!exportData.privateKey) {
-          if (!cancelled) setWallet(null);
-          return;
-        }
-
-        const workspaceWallet = EmbeddedWallet.fromSecret(exportData.privateKey);
         if (!cancelled) {
-          setWallet(workspaceWallet);
+          setWallet({
+            id: candidate.id,
+            publicKey: candidate.publicKey,
+          });
         }
       } catch {
         if (!cancelled) setWallet(null);

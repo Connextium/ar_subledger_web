@@ -93,7 +93,7 @@ export default function VendorInvoicesPage() {
 
     let cancelled = false;
     void Promise.all([
-      service.listBuyerLedgers(),
+      service.listBuyerLedgers(activeWorkspaceId),
       controlPlaneService.listBuyerLedgerLinks(activeWorkspaceId),
       controlPlaneService.listLedgerLinks(activeWorkspaceId),
     ])
@@ -122,8 +122,8 @@ export default function VendorInvoicesPage() {
 
     let cancelled = false;
     void Promise.all([
-      service.listVendorInvoices(ledgerPubkey),
-      service.listVendors(ledgerPubkey),
+      service.listVendorInvoices({ workspaceId: activeWorkspaceId, ledgerPubkey }),
+      service.listVendors({ workspaceId: activeWorkspaceId, ledgerPubkey }),
     ])
       .then(([invoices, vendors]) => {
         if (cancelled) return;
@@ -137,7 +137,7 @@ export default function VendorInvoicesPage() {
     return () => {
       cancelled = true;
     };
-  }, [ledgerPubkey, service]);
+  }, [activeWorkspaceId, ledgerPubkey, service]);
 
   async function handleReceive() {
     if (!service) return;
@@ -145,6 +145,7 @@ export default function VendorInvoicesPage() {
     setMessage(null);
     try {
       const pubkey = await service.receiveVendorInvoice({
+        workspaceId: activeWorkspaceId,
         ledgerPubkey,
         vendorPubkey,
         invoiceNo,
@@ -163,9 +164,13 @@ export default function VendorInvoicesPage() {
       setCurrency("USD");
       setDescription("");
       setDocumentHash("");
-      setRows(await service.listVendorInvoices(ledgerPubkey));
+      setRows(await service.listVendorInvoices({ workspaceId: activeWorkspaceId, ledgerPubkey }));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      const text = error instanceof Error ? error.message : String(error);
+      setMessage(text);
+      if (text.toLowerCase().includes("duplicate invoice number")) {
+        window.alert(text);
+      }
     } finally {
       setBusy(false);
     }

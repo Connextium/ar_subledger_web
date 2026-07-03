@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
-import { deriveSettlementRoutePda } from "@/lib/api-client/v1/pdas";
 import type { SettlementRouteRecord } from "@/lib/types/domain";
 import { controlPlaneService } from "@/lib/api-client/v1/platform";
 import { createSettlementFacilitatorService } from "@/lib/api-client/v1/facilitator";
@@ -29,18 +28,8 @@ export default function SettlementRoutesPage() {
       setRows([]);
       return;
     }
-    const [nextRoutes, workspaceRouteLinks] = await Promise.all([
-      service.listRoutes(),
-      controlPlaneService.listWorkspaceSettlementRoutes(activeWorkspaceId),
-    ]);
-    const workspaceRoutePdas = new Set(
-      workspaceRouteLinks.filter((route) => route.status === "active").map((route) => route.routePda),
-    );
-    setRows(
-      nextRoutes.filter(
-        (route) => workspaceRoutePdas.has(route.pubkey) && route.facilitator === wallet.publicKey.toBase58(),
-      ),
-    );
+    const nextRoutes = await service.listRoutes(activeWorkspaceId);
+    setRows(nextRoutes);
   }
 
   useEffect(() => {
@@ -56,8 +45,7 @@ export default function SettlementRoutesPage() {
       if (!activeWorkspaceId) {
         throw new Error("Select a workspace before creating a settlement route.");
       }
-      const [derivedRoute] = deriveSettlementRoutePda(wallet.publicKey, routeCode);
-      let createdRoute = await service.getRoute(derivedRoute.toBase58());
+      let createdRoute = rows.find((route) => route.routeCode === routeCode) ?? null;
       const recoveredExistingRoute = Boolean(createdRoute);
 
       if (createdRoute) {
@@ -69,11 +57,12 @@ export default function SettlementRoutesPage() {
         }
       } else {
         const pubkey = await service.initializeRoute({
+          workspaceId: activeWorkspaceId,
           routeCode,
           buyerApLedgerPubkey: buyerApLedger,
           supplierArLedgerPubkey: supplierArLedger,
         });
-        createdRoute = await service.getRoute(pubkey);
+        createdRoute = await service.getRoute(activeWorkspaceId, pubkey);
       }
 
       if (!createdRoute) {

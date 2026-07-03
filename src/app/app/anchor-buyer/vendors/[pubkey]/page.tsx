@@ -50,8 +50,8 @@ export default function VendorDetailPage() {
       setLoading(true);
       setMessage(null);
       const [vendors, buyerLedgers] = await Promise.all([
-        service.listVendors(),
-        service.listBuyerLedgers(),
+        service.listVendors(activeWorkspaceId),
+        service.listBuyerLedgers(activeWorkspaceId),
       ]);
       const nextVendor = vendors.find((row) => row.pubkey === vendorPubkey) ?? null;
       setVendor(nextVendor);

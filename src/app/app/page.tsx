@@ -44,8 +44,11 @@ export default function DashboardPage() {
       setError(null);
 
       try {
-        const [allLedgers] = await Promise.all([
-          service.listLedgers(),
+        const workspaceId = selectedWorkspaceId;
+        const [allLedgers, allCustomers, allInvoices] = await Promise.all([
+          workspaceId ? service.listLedgers(workspaceId) : service.listLedgers(),
+          workspaceId ? service.listCustomers(workspaceId) : Promise.resolve([]),
+          workspaceId ? service.listInvoices(workspaceId) : Promise.resolve([]),
         ]);
 
         const ledgers =
@@ -53,21 +56,9 @@ export default function DashboardPage() {
             ? allLedgers.filter((ledger) => workspaceLedgerSet.has(ledger.pubkey))
             : allLedgers;
 
-        // Optimize: fetch customers and invoices for each active ledger separately
-        // This uses memcmp filtering in getProgramAccounts instead of scanning all accounts
-        const ledgerKeys = ledgers.map((ledger) => ledger.pubkey);
-        const customerPromises = ledgerKeys.map((ledgerKey) =>
-          service.listCustomers(ledgerKey),
-        );
-        const invoicePromises = ledgerKeys.map((ledgerKey) =>
-          service.listInvoices(ledgerKey),
-        );
-
-        const customerResults = await Promise.all(customerPromises);
-        const invoiceResults = await Promise.all(invoicePromises);
-
-        const customers = customerResults.flat();
-        const invoices = invoiceResults.flat();
+        const ledgerPubkeys = new Set(ledgers.map((ledger) => ledger.pubkey));
+        const customers = allCustomers.filter((customer) => ledgerPubkeys.has(customer.ledger));
+        const invoices = allInvoices.filter((invoice) => ledgerPubkeys.has(invoice.ledger));
 
         const counts = invoices.reduce<Record<number, number>>((acc, invoice) => {
           acc[invoice.status] = (acc[invoice.status] ?? 0) + 1;
@@ -89,7 +80,7 @@ export default function DashboardPage() {
     };
 
     void run();
-  }, [service, workspaceLedgerSet]);
+  }, [selectedWorkspaceId, service, workspaceLedgerSet]);
 
   return (
     <div>
@@ -122,7 +113,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 gap-2 text-[11px]">
             <QuickLink href="/app/vendor-supplier/workflow#initialize-ledger" label="Initialize ledger" />
             <QuickLink href="/app/vendor-supplier/workflow#create-customer" label="Create customer" />
-            <QuickLink href="/app/vendor-supplier/workflow#issue-invoice" label="Issue invoice" />
+            <QuickLink href="/app/vendor-supplier/invoices/new" label="Issue invoice" />
             <QuickLink href="/app/vendor-supplier/workflow#record-receipt" label="Record receipt" />
             <QuickLink href="/app/vendor-supplier/workflow#issue-credit-note" label="Issue credit note" />
             <QuickLink href="/app/vendor-supplier/workflow#write-off-invoice" label="Write off invoice" />

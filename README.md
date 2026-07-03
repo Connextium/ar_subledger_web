@@ -23,11 +23,7 @@ Use `apps/web/.env.local` for local development.
 Required public/runtime keys:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
-NEXT_PUBLIC_SOLANA_RPC_URL=http://127.0.0.1:8899
-NEXT_PUBLIC_AR_SUBLEDGER_PROGRAM_ID=YOUR_PROGRAM_ID
-NEXT_PUBLIC_ACCOUNTING_ENGINE_PROGRAM_ID=YOUR_ACCOUNTING_ENGINE_PROGRAM_ID
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 ```
 
 Required server-only keys (wallet phases A-F):

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { PageTitle } from "@/components/ui/page-title";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -37,7 +36,7 @@ type SortOrder = "asc" | "desc";
     try {
       setIsLoading(true);
       setError(null);
-      const journalEntries = await accountingEngineService.listJournalEntries(new PublicKey(ledgerKey));
+      const journalEntries = await accountingEngineService.listJournalEntries(ledgerKey);
       setEntries(journalEntries);
     } catch (err) {
       console.error("Error loading journal entries:", err);

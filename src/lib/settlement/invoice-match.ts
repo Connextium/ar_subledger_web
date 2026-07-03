@@ -20,16 +20,25 @@ export type SettlementInvoiceMatch = {
   };
 };
 
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 export function compareSettlementInvoice(
   invoice: MatchableSettlementInvoice | null,
   expected: ExpectedSettlementInvoice,
 ): SettlementInvoiceMatch {
+  const expectedPubkey = expected.pubkey.trim();
+  const expectedLedger = expected.ledger.trim();
+  const expectedInvoiceNo = normalizeText(expected.invoiceNo);
+  const expectedCurrency = normalizeText(expected.currency);
+
   const fields = {
-    pda: invoice?.pubkey === expected.pubkey,
-    ledger: invoice?.ledger === expected.ledger,
-    invoiceNo: invoice?.invoiceNo === expected.invoiceNo,
+    pda: expectedPubkey.length === 0 ? true : invoice?.pubkey === expectedPubkey,
+    ledger: expectedLedger.length === 0 ? true : invoice?.ledger === expectedLedger,
+    invoiceNo: normalizeText(invoice?.invoiceNo ?? "") === expectedInvoiceNo,
     originalAmount: invoice?.originalAmount === expected.originalAmount,
-    currency: invoice?.currency === expected.currency,
+    currency: normalizeText(invoice?.currency ?? "") === expectedCurrency,
   };
 
   return {

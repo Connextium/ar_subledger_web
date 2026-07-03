@@ -9,8 +9,7 @@ function assertIncludes(source: string, expected: string, label: string) {
 
 const listPage = readFileSync(resolve("src/app/app/anchor-buyer/vendor-invoices/page.tsx"), "utf8");
 const detailPage = readFileSync(resolve("src/app/app/anchor-buyer/vendor-invoices/[pubkey]/page.tsx"), "utf8");
-const apService = readFileSync(resolve("src/services/ap-subledger-service.ts"), "utf8");
-const serviceContracts = readFileSync(resolve("src/services/contracts.ts"), "utf8");
+const buyerApiClient = readFileSync(resolve("src/lib/api-client/v1/buyer.ts"), "utf8");
 
 assertIncludes(listPage, "service.listVendorInvoices(ledgerPubkey)", "invoice list scoped to selected Buyer Ledger");
 assertIncludes(listPage, "service.listVendors(ledgerPubkey)", "vendor filter scoped to selected Buyer Ledger");
@@ -21,8 +20,7 @@ assertIncludes(listPage, "filteredRows", "derived filtered invoice inventory");
 assertIncludes(listPage, "getInvoiceStatus", "open, partially paid, and paid status derivation");
 assertIncludes(listPage, "/app/anchor-buyer/vendor-invoices/${row.pubkey}", "invoice row detail link");
 
-assertIncludes(serviceContracts, "getVendorInvoice(pubkey: string)", "AP service contract supports direct invoice lookup");
-assertIncludes(apService, "async getVendorInvoice", "AP service implements direct invoice lookup");
+assertIncludes(buyerApiClient, "apiFetch", "buyer API client uses HTTP boundary implementation");
 assertIncludes(detailPage, "service.getVendorInvoice(params.pubkey)", "detail loads one invoice directly");
 assertIncludes(detailPage, "useWorkspace", "detail reads the active workspace");
 assertIncludes(detailPage, "listBuyerLedgerLinks(activeWorkspaceId)", "detail loads workspace Buyer Ledger links");

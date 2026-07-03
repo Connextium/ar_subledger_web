@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import type {
   BuyerLedgerRecord,
   WorkspaceBuyerLedgerLink,
-  WorkspaceLedgerLink,
 } from "@/lib/types/domain";
-import { filterBuyerLedgersByWorkspaceLinks } from "@/services/buyer-ledger-workspace";
+import { filterBuyerLedgersByWorkspaceLinks } from "@/lib/api-client/v1/buyer-ledger-workspace";
 
 function ledger(pubkey: string, accountingLedger = `accounting-${pubkey}`): BuyerLedgerRecord {
   return {
@@ -18,19 +17,6 @@ function ledger(pubkey: string, accountingLedger = `accounting-${pubkey}`): Buye
     nextJournalEntryId: 1,
     vendorCount: 0,
     invoiceCount: 0,
-  };
-}
-
-function baseGlLink(onchainLedgerKey: string): WorkspaceLedgerLink {
-  return {
-    id: `base-gl-${onchainLedgerKey}`,
-    workspaceId: "workspace-a",
-    ledgerPda: `subledger-${onchainLedgerKey}`,
-    ledgerCode: `gl-${onchainLedgerKey}`,
-    authorityPubkey: "workspace-authority",
-    onchainLedgerKey,
-    status: "active",
-    createdAt: "2026-06-20T00:00:00.000Z",
   };
 }
 
@@ -50,16 +36,14 @@ function link(ledgerPda: string, status: WorkspaceBuyerLedgerLink["status"]): Wo
 const result = filterBuyerLedgersByWorkspaceLinks(
   [
     ledger("workspace-ledger"),
-    ledger("legacy-workspace-ledger", "workspace-base-gl"),
     ledger("other-workspace-ledger"),
-    ledger("inactive-ledger", "workspace-base-gl"),
+    ledger("inactive-ledger"),
   ],
   [link("workspace-ledger", "active"), link("inactive-ledger", "inactive")],
-  [baseGlLink("workspace-base-gl")],
 );
 
 assert.deepEqual(
   result.map((row) => row.pubkey),
-  ["workspace-ledger", "legacy-workspace-ledger"],
-  "workspace Buyer Ledgers should include legacy records inferred through an active Base GL link",
+  ["workspace-ledger"],
+  "workspace Buyer Ledgers should include only active linked records in api-client boundary helper",
 );

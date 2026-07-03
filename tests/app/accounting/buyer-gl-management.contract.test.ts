@@ -15,7 +15,6 @@ function assertExcludes(source: string, unexpected: string, label: string) {
 
 const accountingPage = readFileSync(resolve("src/app/app/accounting/page.tsx"), "utf8");
 const glSetupComponent = readFileSync(resolve("src/components/accounting/gl-setup.tsx"), "utf8");
-const initializeGlApi = readFileSync(resolve("src/app/api/accounting/initialize-gl/route.ts"), "utf8");
 const baseGlManageRoutePath = resolve("src/app/app/accounting/base-gl/[glPubkey]/manage/page.tsx");
 
 assertIncludes(
@@ -42,6 +41,9 @@ assertIncludes(baseGlManageRoute, "allowedInitializationTypes", "Base GL manage 
 
 assertIncludes(glSetupComponent, "defaultInitializationType", "GL setup supports caller-selected default");
 assertIncludes(glSetupComponent, "ledgerKey,", "GL setup submits Base GL pubkey to initialize API");
-
-assertIncludes(initializeGlApi, 'generalLedgerId.startsWith("base-gl:")', "initialize API recognizes Base GL IDs");
-assertIncludes(initializeGlApi, "ledgerKey", "initialize API accepts Base GL pubkey");
+assertIncludes(glSetupComponent, "resolveApiBasePath", "GL setup resolves external API base URL");
+assertIncludes(
+  glSetupComponent,
+  "/api/v1/accounting/workspaces/${encodeURIComponent(selectedWorkspaceId)}/initialize-gl",
+  "initialize GL call targets apps/api external route directly",
+);

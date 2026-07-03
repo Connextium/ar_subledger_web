@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { AlertCircle } from "lucide-react";
 import GlSetupComponent from "@/components/accounting/gl-setup";
 import JournalEntriesComponent from "@/components/accounting/journal-entries";
@@ -37,11 +36,11 @@ export default function BaseGlAccountingManagePage() {
     try {
       setLoading(true);
       setError(null);
-      const [ledger, supplierLedgers, buyerLedgers] = await Promise.all([
-        accountingEngineService.getLedger(new PublicKey(glPubkey)),
+      const [ledger, supplierLedgers, buyerLedgers] = (await Promise.all([
+        accountingEngineService.getLedger(glPubkey),
         arSubledgerService ? arSubledgerService.listLedgers() : Promise.resolve([]),
         apSubledgerService ? apSubledgerService.listBuyerLedgers() : Promise.resolve([]),
-      ]);
+      ])) as [AccountingLedger | null, LedgerRecord[], BuyerLedgerRecord[]];
 
       if (!ledger) {
         throw new Error("Base GL not found");
@@ -91,7 +90,7 @@ export default function BaseGlAccountingManagePage() {
     <div className="space-y-8">
       <div>
         <PageTitle title="Base GL - Accounting Management" />
-        <p className="mt-1 text-gray-600">Base GL ( COA ): {baseGl.account.ledgerCode}</p>
+        <p className="mt-1 text-gray-600">Base GL ( COA ): {baseGl.account?.ledgerCode ?? baseGl.ledgerCode ?? "-"}</p>
         <p className="mt-1 font-mono text-xs text-gray-500">{glPubkey}</p>
       </div>
 

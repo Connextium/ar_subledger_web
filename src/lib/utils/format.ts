@@ -14,9 +14,10 @@ export function formatUnixDate(ts: number): string {
   });
 }
 
-export function clampText(value: string, limit = 32): string {
-  if (value.length <= limit) return value;
-  return `${value.slice(0, limit)}...`;
+export function clampText(value: unknown, limit = 32): string {
+  const text = typeof value === "string" ? value : value == null ? "" : String(value);
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}...`;
 }
 
 export function parseAmountToMinor(value: string): number {

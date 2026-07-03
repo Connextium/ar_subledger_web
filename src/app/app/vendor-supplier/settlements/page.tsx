@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "@/components/records/data-table";
 import { SearchBar } from "@/components/records/search-bar";
 import { useWorkingContext } from "@/context/working-context";
+import { useWorkspace } from "@/context/workspace-context";
 import { PageTitle } from "@/components/ui/page-title";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
 import type { CreditNoteRecord, InvoiceRecord, ReceiptRecord, WriteOffRecord } from "@/lib/types/domain";
@@ -25,6 +26,7 @@ type SettlementRow = {
 export default function SettlementsPage() {
   const service = useArSubledger();
   const searchParams = useSearchParams();
+  const { selectedWorkspaceId } = useWorkspace();
   const { workspaceId, ledgerPda: contextLedgerPda, customerId: contextCustomerId } = useWorkingContext();
 
   const invoiceParam = searchParams.get("invoice");
@@ -33,6 +35,7 @@ export default function SettlementsPage() {
 
   const activeLedgerPda = ledgerParam ?? contextLedgerPda;
   const selectedCustomerScope = customerParam ?? contextCustomerId;
+  const activeWorkspaceId = workspaceId ?? selectedWorkspaceId;
 
   const [rows, setRows] = useState<SettlementRow[]>([]);
   const [scopedCustomerPubkeys, setScopedCustomerPubkeys] = useState<string[]>([]);
@@ -48,7 +51,7 @@ export default function SettlementsPage() {
         return;
       }
 
-      if (!workspaceId) {
+      if (!activeWorkspaceId) {
         setScopedCustomerPubkeys([selectedCustomerScope]);
         setScopeLoading(false);
         return;
@@ -57,7 +60,7 @@ export default function SettlementsPage() {
       setScopeLoading(true);
       try {
         const links = await controlPlaneService.listWorkspaceCustomerLedgerLinks({
-          workspaceId,
+          workspaceId: activeWorkspaceId,
           workspaceCustomerId: selectedCustomerScope,
         });
 
@@ -76,7 +79,7 @@ export default function SettlementsPage() {
     };
 
     void resolveScope();
-  }, [activeLedgerPda, selectedCustomerScope, workspaceId]);
+  }, [activeLedgerPda, activeWorkspaceId, selectedCustomerScope]);
 
   useEffect(() => {
     const run = async () => {
@@ -91,6 +94,12 @@ export default function SettlementsPage() {
         return;
       }
 
+      if (!activeWorkspaceId) {
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
         const scopedCustomerSet = new Set(
@@ -98,7 +107,10 @@ export default function SettlementsPage() {
         );
 
         const [invoices, receipts, credits, writeoffs] = await Promise.all([
-          service.listInvoices(activeLedgerPda ?? undefined),
+          service.listInvoices({
+            workspaceId: activeWorkspaceId,
+            ledgerPda: activeLedgerPda ?? undefined,
+          }),
           service.listReceipts(invoiceParam ?? undefined),
           service.listCreditNotes(invoiceParam ?? undefined),
           service.listWriteOffs(invoiceParam ?? undefined),
@@ -119,13 +131,15 @@ export default function SettlementsPage() {
           .sort((a, b) => b.occurredAt - a.occurredAt);
 
         setRows(flattened);
+      } catch {
+        setRows([]);
       } finally {
         setLoading(false);
       }
     };
 
     void run();
-  }, [activeLedgerPda, invoiceParam, scopedCustomerPubkeys, selectedCustomerScope, service]);
+  }, [activeLedgerPda, activeWorkspaceId, invoiceParam, scopedCustomerPubkeys, selectedCustomerScope, service]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

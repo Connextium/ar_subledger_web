@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -29,6 +28,16 @@ export default function SettlementExecutionsPage() {
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [lastExecutionDebug, setLastExecutionDebug] = useState<{
+    execution: string | null;
+    signature: string | null;
+    routePubkey: string;
+    documentPubkey: string;
+    settlementSeq: number;
+    amountMinor: number;
+    memo: string;
+    executedAtIso: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [delegateStatus, setDelegateStatus] = useState<{
     buyer: PostingDelegateStatus | null;
@@ -63,7 +72,7 @@ export default function SettlementExecutionsPage() {
       workspaceRouteLinks.filter((link) => link.status === "active").map((link) => link.routePda),
     );
     const scopedRoutes = nextRoutes.filter(
-      (route) => activeRoutePdas.has(route.pubkey) && route.facilitator === wallet.publicKey.toBase58(),
+      (route) => activeRoutePdas.has(route.pubkey) && route.facilitator === wallet.publicKey,
     );
     const workspaceRoutePdas = new Set(scopedRoutes.map((route) => route.pubkey));
     const scopedDocuments = nextDocuments.filter((document) => workspaceRoutePdas.has(document.route));
@@ -96,15 +105,14 @@ export default function SettlementExecutionsPage() {
 
     void (async () => {
       try {
-        const facilitator = new PublicKey(selectedRoute.facilitator);
         const [buyer, supplier] = await Promise.all([
           accountingEngineService.getPostingDelegateStatus(
-            new PublicKey(selectedRoute.buyerAccountingLedger),
-            facilitator,
+            selectedRoute.buyerAccountingLedger,
+            selectedRoute.facilitator,
           ),
           accountingEngineService.getPostingDelegateStatus(
-            new PublicKey(selectedRoute.supplierAccountingLedger),
-            facilitator,
+            selectedRoute.supplierAccountingLedger,
+            selectedRoute.facilitator,
           ),
         ]);
         setDelegateStatus({ buyer, supplier });
@@ -120,14 +128,25 @@ export default function SettlementExecutionsPage() {
     setBusy(true);
     setMessage(null);
     try {
-      const pubkey = await service.executeSettlement({
+      const amountMinor = parseAmountToMinor(amount);
+      const result = await service.executeSettlement({
         routePubkey,
         documentPubkey,
         settlementSeq: Number(settlementSeq),
-        amountMinor: parseAmountToMinor(amount),
+        amountMinor,
         memo,
       });
-      setMessage(`Executed settlement ${pubkey}`);
+      setMessage(`Executed settlement ${result.execution ?? "(missing execution pubkey)"}`);
+      setLastExecutionDebug({
+        execution: result.execution,
+        signature: result.signature,
+        routePubkey,
+        documentPubkey,
+        settlementSeq: Number(settlementSeq),
+        amountMinor,
+        memo,
+        executedAtIso: new Date().toISOString(),
+      });
       setAmount("");
       setMemo("");
       await refresh();
@@ -142,6 +161,21 @@ export default function SettlementExecutionsPage() {
     <div className="space-y-4">
       <PageTitle title="Settlement Executions" subtitle="Posted settlement entries across buyer and supplier ledgers." />
       {message ? <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">{message}</p> : null}
+      {lastExecutionDebug ? (
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
+          <h2 className="text-xs font-semibold text-amber-950">Execution Debug</h2>
+          <div className="mt-2 grid gap-1 font-mono">
+            <p>execution: {lastExecutionDebug.execution ?? "null"}</p>
+            <p>signature: {lastExecutionDebug.signature ?? "null"}</p>
+            <p>route: {lastExecutionDebug.routePubkey}</p>
+            <p>document: {lastExecutionDebug.documentPubkey}</p>
+            <p>settlementSeq: {lastExecutionDebug.settlementSeq}</p>
+            <p>amountMinor: {lastExecutionDebug.amountMinor}</p>
+            <p>memo: {lastExecutionDebug.memo || "-"}</p>
+            <p>executedAt: {lastExecutionDebug.executedAtIso}</p>
+          </div>
+        </section>
+      ) : null}
       <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
         <h2 className="text-xs font-semibold text-slate-900">Execute Settlement</h2>
         <div className="mt-2 grid gap-2 md:grid-cols-3">

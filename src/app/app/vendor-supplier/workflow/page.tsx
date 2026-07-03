@@ -13,6 +13,7 @@ import { useWorkspace } from "@/context/workspace-context";
 import { useWorkingContext } from "@/context/working-context";
 import { controlPlaneService } from "@/lib/api-client/v1/platform";
 import { accountingEngineService } from "@/lib/api-client/v1/accounting";
+import { dispatchReloginRequired, RELOGIN_WARNING_MESSAGE } from "@/lib/auth/relogin-warning";
 import {
   closeInvoiceSchema,
   issueCreditNoteSchema,
@@ -140,7 +141,7 @@ export default function WorkflowPage() {
     );
   }, [activeWorkspaceId, ledgerPda, workspaceLedgerLinks]);
 
-  const currentSignerPubkey = wallet?.publicKey.toBase58() ?? null;
+  const currentSignerPubkey = wallet?.publicKey ?? null;
   const hasLedgerAuthorityMismatch = Boolean(
     selectedLedger && currentSignerPubkey && selectedLedger.authority !== currentSignerPubkey,
   );
@@ -150,15 +151,24 @@ export default function WorkflowPage() {
       setLoading(false);
       return;
     }
+    if (!activeWorkspaceId) {
+      setLedgers([]);
+      setInvoices([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const [nextLedgers, nextInvoices] = await Promise.all([service.listLedgers(), service.listInvoices()]);
+      const [nextLedgers, nextInvoices] = await Promise.all([
+        service.listLedgers(activeWorkspaceId),
+        service.listInvoices(activeWorkspaceId),
+      ]);
       setLedgers(nextLedgers);
       setInvoices(nextInvoices);
     } finally {
       setLoading(false);
     }
-  }, [service]);
+  }, [activeWorkspaceId, service]);
 
   const loadContextModel = useCallback(async () => {
     if (!activeWorkspaceId) {
@@ -193,7 +203,8 @@ export default function WorkflowPage() {
     } = await supabase.auth.getSession();
 
     if (!session?.access_token) {
-      throw new Error("Authentication token is missing");
+      dispatchReloginRequired();
+      throw new Error(RELOGIN_WARNING_MESSAGE);
     }
 
     await accountingEngineService.saveJournalEntryPostingLines(

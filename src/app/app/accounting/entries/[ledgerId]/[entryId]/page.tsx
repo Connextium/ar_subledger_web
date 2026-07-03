@@ -14,6 +14,23 @@ type LedgerRow = {
   name?: string | null;
 };
 
+function extractBaseGlPubkey(ledgerId: string): string | null {
+  const normalized = (() => {
+    try {
+      return decodeURIComponent(ledgerId);
+    } catch {
+      return ledgerId;
+    }
+  })();
+
+  if (!normalized.startsWith("base-gl:")) {
+    return null;
+  }
+
+  const pubkey = normalized.slice("base-gl:".length).trim();
+  return pubkey.length > 0 ? pubkey : null;
+}
+
 export default function EntryDetailPage() {
   const params = useParams();
   const ledgerId = params?.ledgerId as string;
@@ -24,7 +41,24 @@ export default function EntryDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const loadLedger = useCallback(async () => {
-    if (!ledgerId || !selectedWorkspaceId) {
+    if (!ledgerId) {
+      setError("Workspace or ledger not found");
+      return;
+    }
+
+    const baseGlPubkey = extractBaseGlPubkey(ledgerId);
+    if (baseGlPubkey) {
+      setLedger({
+        onchain_ledger_key: baseGlPubkey,
+        code: "BASE-GL",
+        name: "Base GL",
+      });
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    if (!selectedWorkspaceId) {
       setError("Workspace or ledger not found");
       return;
     }

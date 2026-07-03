@@ -7,6 +7,8 @@ import { DataTable } from "@/components/records/data-table";
 import { PageTitle } from "@/components/ui/page-title";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
+import { useWorkspace } from "@/context/workspace-context";
+import { useWorkingContext } from "@/context/working-context";
 import {
   INVOICE_STATUS_LABEL,
   type CreditNoteRecord,
@@ -20,7 +22,10 @@ import { formatLamportsAmount, formatUnixDate } from "@/lib/utils/format";
 export default function InvoiceDetailPage() {
   const params = useParams<{ pubkey: string }>();
   const service = useArSubledger();
+  const { selectedWorkspaceId } = useWorkspace();
+  const { workspaceId } = useWorkingContext();
   const invoicePubkey = String(params.pubkey ?? "");
+  const activeWorkspaceId = workspaceId ?? selectedWorkspaceId;
 
   const [invoice, setInvoice] = useState<InvoiceRecord | null>(null);
   const [customer, setCustomer] = useState<CustomerRecord | null>(null);
@@ -31,19 +36,19 @@ export default function InvoiceDetailPage() {
 
   useEffect(() => {
     const run = async () => {
-      if (!service || !invoicePubkey) {
+      if (!service || !invoicePubkey || !activeWorkspaceId) {
         setLoading(false);
         return;
       }
 
       setLoading(true);
       try {
-        const invoiceRow = await service.getInvoice(invoicePubkey);
+        const invoiceRow = await service.getInvoice(activeWorkspaceId, invoicePubkey);
         setInvoice(invoiceRow);
         if (!invoiceRow) return;
 
         const [customerRow, receiptRows, creditRows, writeoffRows] = await Promise.all([
-          service.getCustomer(invoiceRow.customer),
+          service.getCustomer(activeWorkspaceId, invoiceRow.customer),
           service.listReceipts(invoicePubkey),
           service.listCreditNotes(invoicePubkey),
           service.listWriteOffs(invoicePubkey),
@@ -59,7 +64,7 @@ export default function InvoiceDetailPage() {
     };
 
     void run();
-  }, [invoicePubkey, service]);
+  }, [activeWorkspaceId, invoicePubkey, service]);
 
   if (loading) {
     return <p className="text-[11px] text-slate-500">Loading invoice...</p>;
@@ -96,6 +101,12 @@ export default function InvoiceDetailPage() {
           </div>
         }
       />
+
+      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600 shadow-sm">
+        <p>
+          Customer Invoice PDA <span className="break-all font-mono text-[10px] text-slate-700">{invoice.pubkey}</span>
+        </p>
+      </div>
 
       <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Stat label="Status" value={<StatusBadge label={INVOICE_STATUS_LABEL[invoice.status] ?? "Unknown"} />} />

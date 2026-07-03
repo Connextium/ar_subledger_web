@@ -20,6 +20,12 @@ import type { LedgerRecord, WorkspaceLedgerLink } from "@/lib/types/domain";
 import { clampText } from "@/lib/utils/format";
 
 const DEFAULT_INIT_LEDGER_CODE = "";
+const WORKSPACE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isWorkspaceId(value: string | null | undefined): value is string {
+  return typeof value === "string" && WORKSPACE_ID_PATTERN.test(value.trim());
+}
 
 export default function LedgersPage() {
   const router = useRouter();
@@ -31,7 +37,10 @@ export default function LedgersPage() {
   const { workspaceId, ledgerPda, customerId, setLedgerPda, setCustomerId } = useWorkingContext();
 
   const workspaceFromQuery = searchParams.get("workspace");
-  const activeWorkspaceId = selectedWorkspaceId ?? workspaceId ?? workspaceFromQuery;
+  const activeWorkspaceId =
+    selectedWorkspaceId ??
+    (isWorkspaceId(workspaceFromQuery) ? workspaceFromQuery : null) ??
+    (isWorkspaceId(workspaceId) ? workspaceId : null);
 
   const [rows, setRows] = useState<LedgerRecord[]>([]);
   const [search, setSearch] = useState("");
@@ -62,8 +71,12 @@ export default function LedgersPage() {
   const [allAccessibleLedgerLinks, setAllAccessibleLedgerLinks] = useState<WorkspaceLedgerLink[]>([]);
 
   const refreshAccessibleLedgerLinks = useCallback(async () => {
-    const links = await controlPlaneService.listAccessibleLedgerLinks();
-    setAllAccessibleLedgerLinks(links);
+    try {
+      const links = await controlPlaneService.listAccessibleLedgerLinks();
+      setAllAccessibleLedgerLinks(links);
+    } catch {
+      setAllAccessibleLedgerLinks([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -72,46 +85,62 @@ export default function LedgersPage() {
         setLoading(false);
         return;
       }
+      if (!activeWorkspaceId) {
+        setRows([]);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         const [nextRows] = await Promise.all([
-          service.listLedgers(),
+          service.listLedgers(activeWorkspaceId),
           refreshAccessibleLedgerLinks(),
         ]);
         setRows(nextRows);
+      } catch (error) {
+        setRows([]);
+        setMessage(error instanceof Error ? error.message : "Failed to load Supplier ledgers.");
       } finally {
         setLoading(false);
       }
     };
     void run();
-  }, [service, refreshAccessibleLedgerLinks]);
+  }, [activeWorkspaceId, service, refreshAccessibleLedgerLinks]);
 
   useEffect(() => {
     const run = async () => {
-      if (!wallet) {
+      if (!wallet || !activeWorkspaceId) {
         setAccountingGlOptions([]);
         return;
       }
 
-      const accountingGls = await accountingEngineService.listLedgersByAuthority(wallet.publicKey);
-      const nextOptions = accountingGls.map((ledger) => {
-        const pubkey = ledger.publicKey.toBase58();
-        const code = ledger.account.ledgerCode || "";
-        return {
-          value: pubkey,
-          label: `${code || "(no code)"} (${pubkey})`,
-          code,
-        };
-      });
+      try {
+        const accountingGls = await accountingEngineService.listLedgersByAuthority({
+          workspaceId: activeWorkspaceId,
+          authority: wallet.publicKey,
+        });
+        const nextOptions = accountingGls.map((ledger) => {
+          const pubkey = ledger.pubkey || "";
+          const code = ledger.account?.ledgerCode || ledger.ledgerCode || "";
+          return {
+            value: pubkey,
+            label: `${code || "(no code)"} (${pubkey})`,
+            code,
+          };
+        });
 
-      setAccountingGlOptions(nextOptions);
-      if (!initAccountingLedgerPubkey && nextOptions.length > 0) {
-        setInitAccountingLedgerPubkey(nextOptions[0].value);
+        setAccountingGlOptions(nextOptions);
+        if (!initAccountingLedgerPubkey && nextOptions.length > 0) {
+          setInitAccountingLedgerPubkey(nextOptions[0].value);
+        }
+      } catch (error) {
+        setAccountingGlOptions([]);
+        setMessage(error instanceof Error ? error.message : "Failed to load Base GL ledgers.");
       }
     };
 
     void run();
-  }, [initAccountingLedgerPubkey, wallet]);
+  }, [activeWorkspaceId, initAccountingLedgerPubkey, wallet]);
 
   useEffect(() => {
     void refreshAccessibleLedgerLinks();
@@ -181,6 +210,10 @@ export default function LedgersPage() {
         .filter((row) => row.workspaceId === activeWorkspaceId)
         .map((row) => row.ledgerPda),
     );
+
+    if (linkedSupplierLedgerPdas.size === 0) {
+      return rows;
+    }
 
     return rows.filter((row) => linkedSupplierLedgerPdas.has(row.pubkey));
   }, [activeWorkspaceId, ledgerLinks, rows]);
@@ -301,11 +334,11 @@ export default function LedgersPage() {
 
         if (cancelled) return;
 
-        const customerMap = new Map(customers.map((row) => [row.id, row]));
+        const customerMap = new Map((customers as any[]).map((row: any) => [row.id, row]));
         const scoped = links
           .filter((row) => row.ledgerPda === scopeLedgerPda)
           .map((link) => {
-            const customer = customerMap.get(link.workspaceCustomerId);
+            const customer = customerMap.get(link.workspaceCustomerId) as any;
             return {
               id: customer?.id ?? link.workspaceCustomerId,
               customerRef: customer?.customerRef ?? link.customerCode,

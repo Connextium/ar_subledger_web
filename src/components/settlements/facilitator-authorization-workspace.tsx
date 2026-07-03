@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageTitle } from "@/components/ui/page-title";
@@ -49,14 +48,6 @@ function toMessage(error: unknown): string {
   return String(error);
 }
 
-function parsePublicKey(value: string): PublicKey | null {
-  try {
-    return value.trim() ? new PublicKey(value.trim()) : null;
-  } catch {
-    return null;
-  }
-}
-
 export function FacilitatorAuthorizationWorkspace({ side }: { side: LedgerSide }) {
   const { wallet } = useEmbeddedWallet();
   const { selectedWorkspaceId, workspaces } = useWorkspace();
@@ -77,8 +68,8 @@ export function FacilitatorAuthorizationWorkspace({ side }: { side: LedgerSide }
     () => ledgers.find((ledger) => ledger.pubkey === ledgerPubkey) ?? null,
     [ledgerPubkey, ledgers],
   );
-  const facilitatorKey = useMemo(() => parsePublicKey(facilitatorPubkey), [facilitatorPubkey]);
-  const currentSigner = wallet?.publicKey.toBase58() ?? "";
+  const facilitatorKey = facilitatorPubkey.trim();
+  const currentSigner = wallet?.publicKey ?? "";
   const hasAuthority = Boolean(selectedLedger && currentSigner && selectedLedger.authority === currentSigner);
   const title = side === "buyer" ? "Buyer Facilitator Authorization" : "Supplier Facilitator Authorization";
   const subtitle =
@@ -125,14 +116,14 @@ export function FacilitatorAuthorizationWorkspace({ side }: { side: LedgerSide }
   }
 
   async function refreshStatus() {
-    if (!selectedLedger || !facilitatorKey) {
+    if (!selectedLedger || facilitatorKey.length === 0) {
       setStatus(null);
       return;
     }
 
     try {
       const nextStatus = await accountingEngineService.getPostingDelegateStatus(
-        new PublicKey(selectedLedger.accountingLedger),
+        selectedLedger.accountingLedger,
         facilitatorKey,
       );
       setStatus(nextStatus);
@@ -143,12 +134,12 @@ export function FacilitatorAuthorizationWorkspace({ side }: { side: LedgerSide }
   }
 
   async function handleAuthorize() {
-    if (!wallet || !selectedLedger || !facilitatorKey) return;
+    if (!wallet || !selectedLedger || facilitatorKey.length === 0) return;
     setBusy(true);
     setMessage(null);
     try {
       const signature = await accountingEngineService.authorizePostingDelegate(
-        new PublicKey(selectedLedger.accountingLedger),
+        selectedLedger.accountingLedger,
         facilitatorKey,
         wallet,
       );
@@ -162,12 +153,12 @@ export function FacilitatorAuthorizationWorkspace({ side }: { side: LedgerSide }
   }
 
   async function handleRevoke() {
-    if (!wallet || !selectedLedger || !facilitatorKey) return;
+    if (!wallet || !selectedLedger || facilitatorKey.length === 0) return;
     setBusy(true);
     setMessage(null);
     try {
       const signature = await accountingEngineService.revokePostingDelegate(
-        new PublicKey(selectedLedger.accountingLedger),
+        selectedLedger.accountingLedger,
         facilitatorKey,
         wallet,
       );
@@ -223,19 +214,19 @@ export function FacilitatorAuthorizationWorkspace({ side }: { side: LedgerSide }
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button
-            disabled={!canWriteTransactions || !wallet || !selectedLedger || !facilitatorKey || !hasAuthority || busy}
+            disabled={!canWriteTransactions || !wallet || !selectedLedger || facilitatorKey.length === 0 || !hasAuthority || busy}
             onClick={handleAuthorize}
           >
             Authorize
           </Button>
           <Button
             variant="secondary"
-            disabled={!canWriteTransactions || !wallet || !selectedLedger || !facilitatorKey || !hasAuthority || busy || !status?.active}
+            disabled={!canWriteTransactions || !wallet || !selectedLedger || facilitatorKey.length === 0 || !hasAuthority || busy || !status?.active}
             onClick={handleRevoke}
           >
             Revoke
           </Button>
-          <Button variant="ghost" disabled={!selectedLedger || !facilitatorKey || busy} onClick={refreshStatus}>
+          <Button variant="ghost" disabled={!selectedLedger || facilitatorKey.length === 0 || busy} onClick={refreshStatus}>
             Refresh
           </Button>
         </div>

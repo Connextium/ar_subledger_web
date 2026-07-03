@@ -13,12 +13,7 @@ function assertExcludes(source: string, unexpected: string, label: string) {
   }
 }
 
-const service = readFileSync(resolve("src/services/settlement-facilitator-service.ts"), "utf8");
+const facilitatorApiClient = readFileSync(resolve("src/lib/api-client/v1/facilitator.ts"), "utf8");
 
-assertIncludes(service, 'msg.includes("out of range")', "runtime buffer offset errors recognized");
-assertIncludes(service, "connection.getProgramAccounts", "route list reads raw program accounts");
-assertIncludes(service, 'account.name === "settlementRoute"', "route list locates normalized SettlementRoute discriminator");
-assertIncludes(service, 'decode("settlementRoute"', "route accounts decoded individually");
-assertIncludes(service, "data.subarray(0, discriminator.length).equals(discriminator)", "unrelated accounts filtered before decode");
-assertIncludes(service, "Skipping incompatible SettlementRoute account", "one legacy route cannot empty the entire list");
-assertExcludes(service, "this.accountNs.settlementRoute.all()", "all-or-nothing route scan");
+assertIncludes(facilitatorApiClient, "apiFetch", "route list uses facilitator HTTP api-client boundary");
+assertExcludes(facilitatorApiClient, "@/services/", "facilitator api-client should not import removed web services");

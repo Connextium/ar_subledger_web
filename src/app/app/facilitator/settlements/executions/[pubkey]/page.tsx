@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
@@ -28,6 +27,14 @@ function formatTimestamp(seconds: number | bigint): string {
   return new Date(Number(seconds) * 1000).toLocaleString();
 }
 
+function readBase58(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  const candidate = (value as { toBase58?: unknown }).toBase58;
+  if (typeof candidate !== "function") return "";
+  const result = candidate.call(value);
+  return typeof result === "string" ? result : "";
+}
+
 function JournalPanel({
   title,
   journal,
@@ -39,14 +46,24 @@ function JournalPanel({
   expectedPda: string;
   currency: string;
 }) {
+  const journalAny = journal as unknown as {
+    publicKey?: unknown;
+    pubkey?: string;
+    account?: { ledger?: unknown | string };
+  } | null;
+  const journalPubkey = readBase58(journalAny?.publicKey) || (journalAny?.pubkey ?? "");
+  const rawLedger = journalAny?.account?.ledger;
+  const journalLedger =
+    typeof rawLedger === "string" ? rawLedger : readBase58(rawLedger);
+
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
       <h2 className="text-xs font-semibold text-slate-900">{title}</h2>
       {journal ? (
         <div className="mt-3 space-y-1 text-[11px] text-slate-600">
-          <p>Journal PDA: <span className="break-all font-mono">{journal.publicKey.toBase58()}</span></p>
+          <p>Journal PDA: <span className="break-all font-mono">{journalPubkey}</span></p>
           <p>Entry ID: {journal.account.entryId.toString()}</p>
-          <p>Ledger PDA: <span className="break-all font-mono">{journal.account.ledger.toBase58()}</span></p>
+          <p>Ledger PDA: <span className="break-all font-mono">{journalLedger}</span></p>
           <p>External reference: {journal.account.externalRef}</p>
           <p>Memo: {journal.account.memo || "-"}</p>
           <p>Total debit: {formatLamportsAmount(Number(journal.account.totalDebit), currency)}</p>
@@ -104,18 +121,18 @@ export default function SettlementExecutionDetailPage() {
         }
 
         const nextRoute = await service.getRoute(nextExecution.route);
-        if (!nextRoute || nextRoute.facilitator !== wallet.publicKey.toBase58()) {
+        if (!nextRoute || nextRoute.facilitator !== wallet.publicKey) {
           throw new Error("Settlement execution is not owned by the connected facilitator.");
         }
 
         const [nextDocument, nextBuyerJournal, nextSupplierJournal] = await Promise.all([
           service.getDocument(nextExecution.document),
           accountingEngineService.getJournalEntry(
-            new PublicKey(nextRoute.buyerAccountingLedger),
+            nextRoute.buyerAccountingLedger,
             BigInt(nextExecution.buyerJournalEntryId),
           ),
           accountingEngineService.getJournalEntry(
-            new PublicKey(nextRoute.supplierAccountingLedger),
+            nextRoute.supplierAccountingLedger,
             BigInt(nextExecution.supplierJournalEntryId),
           ),
         ]);

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PublicKey } from "@/lib/api-client/v1/public-key";
 import Link from "next/link";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,7 +10,12 @@ import { PageTitle } from "@/components/ui/page-title";
 import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useWorkspace } from "@/context/workspace-context";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
-import type { BuyerLedgerRecord, LedgerRecord, WorkspaceLedgerLink } from "@/lib/types/domain";
+import type {
+  BuyerLedgerRecord,
+  LedgerRecord,
+  WorkspaceBuyerLedgerLink,
+  WorkspaceLedgerLink,
+} from "@/lib/types/domain";
 import {
   AccountingLedger,
   AccountingLedgerDiscoveryDebug,
@@ -120,16 +124,15 @@ export default function AccountingHubPage() {
     }
 
     try {
-      const ledgerKey = new PublicKey(glPubkey);
       const [glAccounts, journalEntries] = await Promise.all([
-        accountingEngineService.listGlAccounts(ledgerKey),
-        accountingEngineService.listJournalEntries(ledgerKey),
+        accountingEngineService.listGlAccounts(glPubkey),
+        accountingEngineService.listJournalEntries(glPubkey),
       ]);
 
       let totalAssets = BigInt(0);
       let totalLiabilities = BigInt(0);
 
-      glAccounts.forEach((account) => {
+      glAccounts.forEach((account: any) => {
         if (account.account.category === "Asset") {
           totalAssets += account.account.balance;
         } else if (account.account.category === "Liability") {
@@ -167,14 +170,46 @@ export default function AccountingHubPage() {
       setIsLoading(true);
       setError(null);
 
+      const safe = async <T,>(operation: Promise<T>, fallback: T): Promise<T> => {
+        try {
+          return await operation;
+        } catch {
+          return fallback;
+        }
+      };
+
       const [baseAccountingGls, workspaceLedgerLinks, workspaceBuyerLinks, arLedgerRows, buyerLedgerRows] =
-        await Promise.all([
-          wallet ? accountingEngineService.listLedgersByAuthority(wallet.publicKey) : Promise.resolve([]),
-          controlPlaneService.listLedgerLinks(activeWorkspaceId),
-          controlPlaneService.listBuyerLedgerLinks(activeWorkspaceId),
-          arSubledgerService ? arSubledgerService.listLedgers() : Promise.resolve([]),
-          apSubledgerService ? apSubledgerService.listBuyerLedgers() : Promise.resolve([]),
-        ]);
+        (await Promise.all([
+          safe(
+            (async () => {
+              const signerScoped =
+                wallet
+                  ? await accountingEngineService.listLedgersByAuthority({
+                      workspaceId: activeWorkspaceId,
+                      authority: wallet.publicKey,
+                    })
+                  : [];
+
+              if (signerScoped.length > 0) {
+                return signerScoped;
+              }
+
+              // Fallback to workspace-scope so buyers can still see Base GL created by workspace main wallet.
+              return accountingEngineService.listLedgersByAuthority({ workspaceId: activeWorkspaceId });
+            })(),
+            [],
+          ),
+          safe(controlPlaneService.listLedgerLinks(activeWorkspaceId), []),
+          safe(controlPlaneService.listBuyerLedgerLinks(activeWorkspaceId), []),
+          arSubledgerService ? safe(arSubledgerService.listLedgers(activeWorkspaceId), []) : Promise.resolve([]),
+          apSubledgerService ? safe(apSubledgerService.listBuyerLedgers(activeWorkspaceId), []) : Promise.resolve([]),
+        ])) as [
+          AccountingLedger[],
+          WorkspaceLedgerLink[],
+          WorkspaceBuyerLedgerLink[],
+          LedgerRecord[],
+          BuyerLedgerRecord[],
+        ];
 
       if (wallet && baseAccountingGls.length === 0) {
         setLedgerDiscoveryDebug(await accountingEngineService.getLedgerDiscoveryDebug(wallet.publicKey));
@@ -203,18 +238,35 @@ export default function AccountingHubPage() {
         if (row.accountingLedger) workspaceGlKeys.add(row.accountingLedger);
       });
 
-      const scopedBuyerLedgerRows = buyerLedgerRows.filter((row) => activeBuyerLedgerPdas.has(row.pubkey));
+      const scopedBuyerLedgerRows =
+        activeBuyerLedgerPdas.size > 0
+          ? buyerLedgerRows.filter((row) => activeBuyerLedgerPdas.has(row.pubkey))
+          : buyerLedgerRows;
       scopedBuyerLedgerRows.forEach((row) => {
         if (row.accountingLedger) workspaceGlKeys.add(row.accountingLedger);
       });
 
+      // Fallback: when link metadata is missing/stale, still show Base GLs owned by current workspace wallet.
+      if (workspaceGlKeys.size === 0 && baseAccountingGls.length > 0) {
+        baseAccountingGls.forEach((ledger) => {
+          if (ledger.pubkey) {
+            workspaceGlKeys.add(ledger.pubkey);
+          }
+        });
+      }
+
       const availableGlByPubkey = new Map<string, AccountingLedger>(
-        baseAccountingGls.map((ledger) => [ledger.publicKey.toBase58(), ledger]),
+        baseAccountingGls
+          .map((ledger) => {
+            const key = ledger.pubkey;
+            return key ? ([key, ledger] as const) : null;
+          })
+          .filter((entry): entry is readonly [string, AccountingLedger] => Boolean(entry)),
       );
       const glByPubkey = new Map<string, AccountingLedger>();
 
       for (const key of workspaceGlKeys) {
-        const ledger = availableGlByPubkey.get(key) ?? await accountingEngineService.getLedger(new PublicKey(key));
+        const ledger = availableGlByPubkey.get(key) ?? await accountingEngineService.getLedger(key);
         if (ledger) {
           glByPubkey.set(key, ledger);
         }
@@ -237,12 +289,12 @@ export default function AccountingHubPage() {
       }
 
       const nextBaseGls: BaseGlWithLinks[] = Array.from(glByPubkey.values())
-        .sort((a, b) => (a.account.ledgerCode || "").localeCompare(b.account.ledgerCode || ""))
+        .sort((a, b) => (a.account?.ledgerCode || a.ledgerCode || "").localeCompare(b.account?.ledgerCode || b.ledgerCode || ""))
         .map((ledger) => {
-          const pubkey = ledger.publicKey.toBase58();
+          const pubkey = ledger.pubkey ?? "";
           return {
             pubkey,
-            code: ledger.account.ledgerCode || pubkey,
+            code: ledger.account?.ledgerCode || ledger.ledgerCode || pubkey,
             ledger,
             linkedSupplierLedgers: supplierLinksByGl.get(pubkey) ?? [],
             linkedBuyerLedgers: buyerLinksByGl.get(pubkey) ?? [],
@@ -306,7 +358,7 @@ export default function AccountingHubPage() {
         workspaceId: activeWorkspaceId,
         ledgerPda: accountingLedgerPubkey,
         ledgerCode: normalizedCode,
-        authorityPubkey: wallet.publicKey.toBase58(),
+        authorityPubkey: wallet.publicKey,
         onchainLedgerKey: accountingLedgerPubkey,
       });
       setStandaloneCreatedPubkey(accountingLedgerPubkey);

@@ -13,8 +13,6 @@ import { useWorkspace } from "@/context/workspace-context";
 import { useWorkingContext } from "@/context/working-context";
 import { useRoleGate } from "@/hooks/use-role-gate";
 import { controlPlaneService } from "@/lib/api-client/v1/platform";
-import { PublicKey } from "@/lib/api-client/v1/public-key";
-import { deriveCustomerPda } from "@/lib/api-client/v1/pdas";
 import {
   createWorkspaceCustomerSchema,
   reserveWorkspaceCustomerCodeSchema,
@@ -22,6 +20,7 @@ import {
   workspaceCustomerCodeSchema,
 } from "@/lib/validation/schemas";
 import type {
+  CustomerRecord,
   LedgerRecord,
   WorkspaceCustomer,
   WorkspaceCustomerCodeRegistryEntry,
@@ -79,7 +78,7 @@ export default function CustomersPage() {
       controlPlaneService.listWorkspaceCustomers(activeWorkspaceId),
       controlPlaneService.listWorkspaceCustomerCodeRegistry(activeWorkspaceId),
       controlPlaneService.listWorkspaceCustomerLedgerLinks({ workspaceId: activeWorkspaceId }),
-      arService ? arService.listLedgers() : Promise.resolve([]),
+      arService ? arService.listLedgers(activeWorkspaceId) : Promise.resolve([]),
     ]);
     setCustomers(nextCustomers);
     setCodeRegistry(nextRegistry);
@@ -115,11 +114,13 @@ export default function CustomersPage() {
     if (!selectedCustomer) return [];
     const links = customerLedgerLinks.filter((row) => row.workspaceCustomerId === selectedCustomer.id);
     const ledgerByPda = new Map<string, WorkspaceLedgerLink>(ledgerLinks.map((row) => [row.ledgerPda, row]));
+    const supplierLedgerByPda = new Map<string, LedgerRecord>(supplierLedgers.map((row) => [row.pubkey, row]));
     return links.map((link) => ({
       link,
       ledger: ledgerByPda.get(link.ledgerPda) ?? null,
+      supplierLedger: supplierLedgerByPda.get(link.ledgerPda) ?? null,
     }));
-  }, [customerLedgerLinks, ledgerLinks, selectedCustomer]);
+  }, [customerLedgerLinks, ledgerLinks, selectedCustomer, supplierLedgers]);
 
   useEffect(() => {
     if (!customerId && filteredCustomers.length > 0 && !isCreateModePinned) {
@@ -163,22 +164,24 @@ export default function CustomersPage() {
     setFormOnchainCustomerPubkey(preferredLink?.onchainCustomerPubkey ?? "");
   }, [selectedCustomer, codeRegistry, customerLedgerLinks]);
 
-  const supplierLedgerPdas = useMemo(
-    () => new Set(supplierLedgers.map((ledger) => ledger.pubkey)),
-    [supplierLedgers],
-  );
-
   const ledgerOptions = useMemo(
-    () =>
-      ledgerLinks
-        .filter(
-          (row) =>
-            row.workspaceId === activeWorkspaceId &&
-            row.status === "active" &&
-            supplierLedgerPdas.has(row.ledgerPda),
-        )
-        .map((row) => ({ value: row.ledgerPda, label: `${row.ledgerCode} (${row.ledgerPda.slice(0, 8)}...)` })),
-    [activeWorkspaceId, ledgerLinks, supplierLedgerPdas],
+    () => {
+      const activeLinkedPdas = new Set(
+        ledgerLinks
+          .filter((row) => row.workspaceId === activeWorkspaceId && row.status === "active")
+          .map((row) => row.ledgerPda),
+      );
+
+      return supplierLedgers.map((ledger) => {
+        const code = ledger.ledgerCode?.trim() || "AR Ledger";
+        const linkedSuffix = activeLinkedPdas.has(ledger.pubkey) ? "" : " - not linked";
+        return {
+          value: ledger.pubkey,
+          label: `${code} (${ledger.pubkey.slice(0, 8)}...)${linkedSuffix}`,
+        };
+      });
+    },
+    [activeWorkspaceId, ledgerLinks, supplierLedgers],
   );
 
   const selectedLinkForForm = useMemo(() => {
@@ -206,11 +209,13 @@ export default function CustomersPage() {
           formOnchainCustomerPubkey.trim() || selectedLinkForForm?.onchainCustomerPubkey || "";
 
         if (!candidatePubkey) {
-          const [derived] = deriveCustomerPda(
-            new PublicKey(formLedgerPda.trim()),
-            formCode.trim().toUpperCase(),
+          const existingCustomers = (await arService.listCustomers(activeWorkspaceId)) as CustomerRecord[];
+          const matched = existingCustomers.find(
+            (customer) =>
+              customer.ledger === formLedgerPda.trim() &&
+              customer.customerCode.toUpperCase() === formCode.trim().toUpperCase(),
           );
-          candidatePubkey = derived.toBase58();
+          candidatePubkey = matched?.pubkey ?? "";
         }
 
         if (!arService || !candidatePubkey) {
@@ -218,7 +223,7 @@ export default function CustomersPage() {
           return;
         }
 
-        const onchainCustomer = await arService.getCustomer(candidatePubkey);
+        const onchainCustomer = await arService.getCustomer(activeWorkspaceId, candidatePubkey);
         if (!cancelled) {
           setIsOnchainInitialized(Boolean(onchainCustomer));
         }
@@ -230,7 +235,7 @@ export default function CustomersPage() {
     return () => {
       cancelled = true;
     };
-  }, [arService, formCode, formLedgerPda, formOnchainCustomerPubkey, selectedCustomer, selectedLinkForForm]);
+  }, [activeWorkspaceId, arService, formCode, formLedgerPda, formOnchainCustomerPubkey, selectedCustomer, selectedLinkForForm]);
 
   const initializeOnchainCustomer = async () => {
     if (!activeWorkspaceId || !selectedCustomer || !arService || !canWriteTransactions) return;
@@ -251,18 +256,29 @@ export default function CustomersPage() {
     setMessage(null);
 
     try {
-      const [derivedCustomerPda] = deriveCustomerPda(new PublicKey(ledgerPda), customerCode);
-      const derivedPubkey = derivedCustomerPda.toBase58();
-
-      let onchainPubkey = derivedPubkey;
-      const existingOnchain = await arService.getCustomer(derivedPubkey);
+      const existingCustomers = (await arService.listCustomers(activeWorkspaceId)) as CustomerRecord[];
+      const existingOnchain = existingCustomers.find(
+        (customer) => customer.ledger === ledgerPda && customer.customerCode.toUpperCase() === customerCode,
+      );
+      let onchainPubkey = existingOnchain?.pubkey ?? "";
       if (!existingOnchain) {
-        onchainPubkey = await arService.createCustomer({
+        const createdCustomer = await arService.createCustomer(activeWorkspaceId, {
           ledgerPubkey: ledgerPda,
           customerCode,
           customerName: selectedCustomer.legalName,
           creditLimitMinor: 0,
         });
+        if (typeof createdCustomer === "string") {
+          onchainPubkey = createdCustomer;
+        } else if (createdCustomer && typeof createdCustomer === "object") {
+          const candidate = (createdCustomer as { pubkey?: unknown; customerPubkey?: unknown }).pubkey
+            ?? (createdCustomer as { pubkey?: unknown; customerPubkey?: unknown }).customerPubkey;
+          onchainPubkey = typeof candidate === "string" ? candidate : "";
+        }
+      }
+
+      if (!onchainPubkey) {
+        throw new Error("Unable to resolve on-chain customer pubkey from API response.");
       }
 
       await controlPlaneService.linkWorkspaceCustomerToLedger({
@@ -397,9 +413,11 @@ export default function CustomersPage() {
               <p className="px-2 py-4 text-xs text-slate-500">No active ledger links yet.</p>
             ) : (
               <div className="space-y-2">
-                {linkedLedgers.map(({ link, ledger }) => (
+                {linkedLedgers.map(({ link, ledger, supplierLedger }) => (
                   <div key={link.id} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px]">
-                    <p className="font-semibold text-slate-900">{ledger?.ledgerCode ?? "Unknown Ledger"}</p>
+                    <p className="font-semibold text-slate-900">
+                      {supplierLedger?.ledgerCode ?? ledger?.ledgerCode ?? `Ledger ${link.ledgerPda.slice(0, 8)}...`}
+                    </p>
                     <p className="mt-1 font-mono text-[10px] text-slate-600">Ledger PDA: {link.ledgerPda}</p>
                     <p className="mt-1 font-mono text-[10px] text-slate-600">Code: {link.customerCode}</p>
                     <p className="mt-1 text-[10px] text-slate-600">Link status: {link.status}</p>
@@ -527,11 +545,13 @@ export default function CustomersPage() {
                 let derivedOnchainCustomerPubkey = "";
                 if (!formOnchainCustomerPubkey.trim() && targetLedgerPda && formCode.trim()) {
                   try {
-                    const [derivedCustomerPda] = deriveCustomerPda(
-                      new PublicKey(targetLedgerPda),
-                      formCode.trim().toUpperCase(),
+                    const existingCustomers = (await arService?.listCustomers(activeWorkspaceId)) as CustomerRecord[] | undefined;
+                    const matched = (existingCustomers ?? []).find(
+                      (customer) =>
+                        customer.ledger === targetLedgerPda &&
+                        customer.customerCode.toUpperCase() === formCode.trim().toUpperCase(),
                     );
-                    derivedOnchainCustomerPubkey = derivedCustomerPda.toBase58();
+                    derivedOnchainCustomerPubkey = matched?.pubkey ?? "";
                   } catch {
                     derivedOnchainCustomerPubkey = "";
                   }

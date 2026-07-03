@@ -18,7 +18,7 @@ export function Topbar() {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const copiedTimerRef = useRef<number | null>(null);
   const canManageWorkspace = role === "admin";
-  const walletAddress = wallet?.publicKey.toBase58() ?? "";
+  const walletAddress = wallet?.publicKey ?? "";
 
   useEffect(() => {
     return () => {

@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { PageTitle } from "@/components/ui/page-title";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, AlertCircle, CheckCircle } from "lucide-react";
 import { accountingEngineService, GlAccount } from "@/lib/api-client/v1/accounting";
 import { supabase } from "@/lib/api-client/v1/session-client";
+import { resolveApiBasePath } from "@/lib/api-client/v1/config";
+import { dispatchReloginRequired, RELOGIN_WARNING_MESSAGE } from "@/lib/auth/relogin-warning";
 import { useParams } from "next/navigation";
 import { useWorkspace } from "@/context/workspace-context";
 
@@ -134,7 +135,7 @@ export default function GlSetupComponent({
     if (!ledgerKey) return;
     try {
       setIsLoading(true);
-      const accounts = await accountingEngineService.listGlAccounts(new PublicKey(ledgerKey));
+      const accounts = await accountingEngineService.listGlAccounts(ledgerKey);
       console.log("[GL Setup] Loaded accounts:", accounts.map((a) => ({ code: a.account.code, name: a.account.name })));
       setGlAccounts(accounts);
     } catch (err) {
@@ -159,14 +160,15 @@ export default function GlSetupComponent({
         data: { session },
       } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error("Authentication token is missing");
+        dispatchReloginRequired();
+        throw new Error(RELOGIN_WARNING_MESSAGE);
       }
 
       if (!selectedWorkspaceId) {
         throw new Error("No workspace selected");
       }
 
-      const response = await fetch("/api/accounting/initialize-gl", {
+      const response = await fetch(resolveApiBasePath(`/api/v1/accounting/workspaces/${encodeURIComponent(selectedWorkspaceId)}/initialize-gl`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -174,7 +176,6 @@ export default function GlSetupComponent({
         },
         body: JSON.stringify({
           generalLedgerId: effectiveGeneralLedgerId,
-          workspaceId: selectedWorkspaceId,
           ledgerKey,
           initializationType,
         }),
@@ -186,7 +187,7 @@ export default function GlSetupComponent({
         rawText = await response.text();
         data = JSON.parse(rawText);
       } catch (e) {
-        console.error("Failed to parse JSON response from /api/accounting/initialize-gl", { rawText, error: e });
+        console.error("Failed to parse JSON response from accounting initialize-gl endpoint", { rawText, error: e });
         throw new Error("Failed to parse server response. See console for details.");
       }
 

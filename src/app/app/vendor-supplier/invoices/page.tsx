@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "@/components/records/data-table";
 import { SearchBar } from "@/components/records/search-bar";
 import { useWorkingContext } from "@/context/working-context";
+import { useWorkspace } from "@/context/workspace-context";
 import { PageTitle } from "@/components/ui/page-title";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useArSubledger } from "@/hooks/use-ar-subledger";
@@ -16,11 +17,13 @@ import { controlPlaneService } from "@/lib/api-client/v1/platform";
 export default function InvoicesPage() {
   const service = useArSubledger();
   const searchParams = useSearchParams();
+  const { selectedWorkspaceId } = useWorkspace();
   const { workspaceId, ledgerPda: contextLedgerPda, customerId: contextCustomerId } = useWorkingContext();
 
   const ledgerParam = searchParams.get("ledger");
   const customerParam = searchParams.get("customer");
   const statusParam = searchParams.get("status");
+  const activeWorkspaceId = workspaceId ?? selectedWorkspaceId;
 
   const activeLedgerPda = ledgerParam ?? contextLedgerPda;
   const selectedCustomerScope = customerParam ?? contextCustomerId;
@@ -47,11 +50,21 @@ export default function InvoicesPage() {
         return;
       }
 
+      if (!activeWorkspaceId) {
+        setRows([]);
+        setCustomers([]);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
         const [nextInvoices, nextCustomers] = await Promise.all([
-          service.listInvoices(activeLedgerPda ?? undefined),
-          service.listCustomers(activeLedgerPda ?? undefined),
+          service.listInvoices({
+            workspaceId: activeWorkspaceId,
+            ledgerPda: activeLedgerPda ?? undefined,
+          }),
+          service.listCustomers(activeWorkspaceId),
         ]);
         setRows(nextInvoices);
         setCustomers(nextCustomers);
@@ -60,7 +73,7 @@ export default function InvoicesPage() {
       }
     };
     void run();
-  }, [activeLedgerPda, selectedCustomerScope, service]);
+  }, [activeLedgerPda, activeWorkspaceId, selectedCustomerScope, service]);
 
   useEffect(() => {
     const resolveScope = async () => {
@@ -70,7 +83,7 @@ export default function InvoicesPage() {
         return;
       }
 
-      if (!workspaceId) {
+      if (!activeWorkspaceId) {
         setScopedCustomerPubkeys([selectedCustomerScope]);
         setScopeLoading(false);
         return;
@@ -79,7 +92,7 @@ export default function InvoicesPage() {
       setScopeLoading(true);
       try {
         const links = await controlPlaneService.listWorkspaceCustomerLedgerLinks({
-          workspaceId,
+          workspaceId: activeWorkspaceId,
           workspaceCustomerId: selectedCustomerScope,
         });
 
@@ -98,7 +111,7 @@ export default function InvoicesPage() {
     };
 
     void resolveScope();
-  }, [activeLedgerPda, selectedCustomerScope, workspaceId]);
+  }, [activeLedgerPda, activeWorkspaceId, selectedCustomerScope]);
 
   useEffect(() => {
     setStatusFilter(statusParam ?? "all");
@@ -138,7 +151,7 @@ export default function InvoicesPage() {
         title="Invoices"
         subtitle="Showing invoices for the selected customer in current context."
         actions={
-          <Link href="/app/vendor-supplier/workflow#issue-invoice" className="text-[11px] underline decoration-slate-300">
+          <Link href="/app/vendor-supplier/invoices/new" className="text-[11px] underline decoration-slate-300">
             Issue invoice
           </Link>
         }

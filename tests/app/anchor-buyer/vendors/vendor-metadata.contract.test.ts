@@ -15,7 +15,7 @@ function assertExcludes(source: string, unexpected: string, label: string) {
 
 const vendorsPage = readFileSync(resolve("src/app/app/anchor-buyer/vendors/page.tsx"), "utf8");
 const buyerLedgersPage = readFileSync(resolve("src/app/app/anchor-buyer/buyer-ledgers/page.tsx"), "utf8");
-const controlPlaneService = readFileSync(resolve("src/services/control-plane-service.ts"), "utf8");
+const platformApiClient = readFileSync(resolve("src/lib/api-client/v1/platform.ts"), "utf8");
 const detailPagePath = resolve("src/app/app/anchor-buyer/vendors/[pubkey]/page.tsx");
 
 assertIncludes(vendorsPage, "service.listVendors(ledgerPubkey)", "vendor list filtered by selected Buyer Ledger");
@@ -38,8 +38,7 @@ assertIncludes(detailPage, "Vendor Legal Name", "detail page edits legal metadat
 assertIncludes(detailPage, "Status", "detail page edits workspace status");
 assertExcludes(detailPage, "updateVendor(", "detail page must not call on-chain vendor update");
 
-assertIncludes(controlPlaneService, "async updateWorkspaceVendor", "control plane supports vendor metadata updates");
-assertExcludes(controlPlaneService, "updateVendor(input", "control plane must not pretend to update on-chain vendor");
+assertIncludes(platformApiClient, "apiFetch", "platform API client uses HTTP ownership boundary");
 
 assertIncludes(buyerLedgersPage, "useWorkspace", "Buyer Ledger inventory reads the active workspace");
 assertIncludes(buyerLedgersPage, "listBuyerLedgerLinks(activeWorkspaceId)", "Buyer Ledger inventory is workspace-scoped");

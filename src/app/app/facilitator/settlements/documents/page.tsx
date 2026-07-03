@@ -44,7 +44,7 @@ export default function SettlementDocumentsPage() {
       workspaceRouteLinks.filter((route) => route.status === "active").map((route) => route.routePda),
     );
     const scopedRoutes = nextRoutes.filter(
-      (route) => workspaceRoutePdas.has(route.pubkey) && route.facilitator === wallet.publicKey.toBase58(),
+      (route) => workspaceRoutePdas.has(route.pubkey) && route.facilitator === wallet.publicKey,
     );
     setRoutes(scopedRoutes);
     setRows(nextRows.filter((document) => workspaceRoutePdas.has(document.route)));
@@ -64,7 +64,7 @@ export default function SettlementDocumentsPage() {
     setMessage(null);
     try {
       const selectedRoute = routes.find((route) => route.pubkey === routePubkey);
-      if (!selectedRoute || selectedRoute.facilitator !== wallet?.publicKey.toBase58()) {
+      if (!selectedRoute || selectedRoute.facilitator !== wallet?.publicKey) {
         throw new Error("Select a route owned by the current facilitator in this workspace.");
       }
       const pubkey = await service.registerDocument({

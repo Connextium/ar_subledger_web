@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { PublicKey } from "@/lib/api-client/v1/public-key";
 import { PageTitle } from "@/components/ui/page-title";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, AlertCircle, CheckCircle, ArrowLeft } from "lucide-react";
@@ -9,6 +8,7 @@ import { accountingEngineService, JournalEntry, PostingLine } from "@/lib/api-cl
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/api-client/v1/session-client";
+import { dispatchReloginRequired, RELOGIN_WARNING_MESSAGE } from "@/lib/auth/relogin-warning";
 
 interface EnrichedPostingLine extends PostingLine {
   accountName?: string;
@@ -23,6 +23,15 @@ export default function JournalEntryDetail({ ledgerKey: generalLedgerKey }: Prop
   const params = useParams();
   const entryId = params?.entryId ? BigInt(params.entryId as string) : null;
   const generalLedgerId = params?.ledgerId as string;
+  const normalizedLedgerId = (() => {
+    if (typeof generalLedgerId !== "string") return "";
+    try {
+      return decodeURIComponent(generalLedgerId);
+    } catch {
+      return generalLedgerId;
+    }
+  })();
+  const isBaseGlContext = normalizedLedgerId.startsWith("base-gl:");
 
   // All hooks must be called unconditionally at the top
   const [entry, setEntry] = useState<JournalEntry | null>(null);
@@ -38,15 +47,13 @@ export default function JournalEntryDetail({ ledgerKey: generalLedgerKey }: Prop
       setIsLoading(true);
       setError(null);
 
-      const ledgerPubkey = new PublicKey(generalLedgerKey);
-
       // Load all GL accounts
       // const accounts = await accountingEngineService.listGlAccounts(ledgerPubkey);
       // const accountMap = new Map(accounts.map((a) => [a.account.code, a]));
       // setGlAccounts(accountMap);
 
       // Load journal entry
-      const journalEntry = await accountingEngineService.getJournalEntry(ledgerPubkey, entryId);
+      const journalEntry = await accountingEngineService.getJournalEntry(generalLedgerKey, entryId);
       if (!journalEntry) {
         setError("Journal entry not found");
         return;
@@ -59,20 +66,23 @@ export default function JournalEntryDetail({ ledgerKey: generalLedgerKey }: Prop
       } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
-        throw new Error("Authentication token is missing");
+        dispatchReloginRequired();
+        throw new Error(RELOGIN_WARNING_MESSAGE);
       }
 
       const [postingLinesRaw, glAccounts] = await Promise.all([
-        accountingEngineService.getJournalEntryPostingLines(
-          generalLedgerId,
-          entryId,
-          session.access_token,
-        ),
-        accountingEngineService.listGlAccounts(ledgerPubkey),
+        isBaseGlContext
+          ? Promise.resolve([])
+          : accountingEngineService.getJournalEntryPostingLines(
+              generalLedgerId,
+              entryId,
+              session.access_token,
+            ),
+        accountingEngineService.listGlAccounts(generalLedgerKey),
       ]);
 
-      const glAccountMap = new Map(glAccounts.map((a) => [a.account.code, a]));
-      const enrichedLines: EnrichedPostingLine[] = postingLinesRaw.map((line) => ({
+      const glAccountMap = new Map((glAccounts as any[]).map((a: any) => [a.account.code, a]));
+      const enrichedLines: EnrichedPostingLine[] = (postingLinesRaw as any[]).map((line: any) => ({
         ...line,
         accountName: glAccountMap.get(line.accountCode)?.account.name,
         accountCategory: glAccountMap.get(line.accountCode)?.account.category,
@@ -84,7 +94,7 @@ export default function JournalEntryDetail({ ledgerKey: generalLedgerKey }: Prop
     } finally {
       setIsLoading(false);
     }
-  }, [generalLedgerId, generalLedgerKey, entryId]);
+  }, [generalLedgerId, generalLedgerKey, entryId, isBaseGlContext]);
 
   useEffect(() => {
     void loadData();
@@ -198,10 +208,10 @@ export default function JournalEntryDetail({ ledgerKey: generalLedgerKey }: Prop
                       <td className="px-6 py-3 text-sm text-gray-900">{line.accountName || "Unknown"}</td>
                       <td className="px-6 py-3 text-sm text-gray-600">{line.accountCategory || "—"}</td>
                       <td className="px-6 py-3 text-right text-sm font-mono text-gray-900">
-                        {line.isDebit ? formatAmount(line.amount) : "—"}
+                        {line.isDebit ? formatAmount(BigInt(line.amount)) : "—"}
                       </td>
                       <td className="px-6 py-3 text-right text-sm font-mono text-gray-900">
-                        {!line.isDebit ? formatAmount(line.amount) : "—"}
+                        {!line.isDebit ? formatAmount(BigInt(line.amount)) : "—"}
                       </td>
                     </tr>
                   ))}
