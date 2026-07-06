@@ -20,8 +20,8 @@
       }
     ],
     "paths": {
-      "@ar-subledger/api-contracts": ["../../packages/api-contracts/src/index.ts"],
-      "@ar-subledger/api-contracts/*": ["../../packages/api-contracts/src/*"],
+      "@ar-subledger/api-contracts": ["./packages/api-contracts/src/index.ts"],
+      "@ar-subledger/api-contracts/*": ["./packages/api-contracts/src/*"],
       "@/*": ["./src/*"]
     }
   },

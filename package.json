@@ -10,7 +10,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@ar-subledger/api-contracts": "file:../../packages/api-contracts",
+    "@ar-subledger/api-contracts": "file:./packages/api-contracts",
     "lucide-react": "^1.12.0",
     "next": "16.2.2",
     "react": "19.2.4",

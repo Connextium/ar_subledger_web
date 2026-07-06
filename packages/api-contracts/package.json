@@ -1,0 +1,19 @@
+{
+  "name": "@ar-subledger/api-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./accounting": "./src/accounting.ts",
+    "./auth": "./src/auth.ts",
+    "./buyer": "./src/buyer.ts",
+    "./envelope": "./src/envelope.ts",
+    "./facilitator": "./src/facilitator.ts",
+    "./factor": "./src/factor.ts",
+    "./platform": "./src/platform.ts",
+    "./scopes": "./src/scopes.ts",
+    "./supplier": "./src/supplier.ts",
+    "./webhooks": "./src/webhooks.ts"
+  }
+}
