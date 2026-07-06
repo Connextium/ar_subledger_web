@@ -11,6 +11,13 @@ export type {
 } from "@ar-subledger/api-contracts/supplier";
 import { apiFetch } from "@/lib/api-client/v1/http";
 
+const WORKSPACE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isWorkspaceId(value: string): boolean {
+  return WORKSPACE_ID_PATTERN.test(value.trim());
+}
+
 function workspacePath(workspaceId: string, segment: string): string {
   const normalized = segment.startsWith("/") ? segment : `/${segment}`;
   return `/api/v1/supplier/workspaces/${encodeURIComponent(workspaceId)}${normalized}`;
@@ -22,7 +29,7 @@ function resolveWorkspaceIdFromBrowserContext(): string | null {
   }
 
   const fromQuery = new URL(window.location.href).searchParams.get("workspace")?.trim();
-  if (fromQuery) {
+  if (fromQuery && isWorkspaceId(fromQuery)) {
     return fromQuery;
   }
 
@@ -33,7 +40,9 @@ function resolveWorkspaceIdFromBrowserContext(): string | null {
 
   try {
     const parsed = JSON.parse(raw) as { workspaceId?: unknown };
-    return typeof parsed.workspaceId === "string" && parsed.workspaceId.length > 0 ? parsed.workspaceId : null;
+    return typeof parsed.workspaceId === "string" && isWorkspaceId(parsed.workspaceId)
+      ? parsed.workspaceId
+      : null;
   } catch {
     return null;
   }
@@ -41,22 +50,43 @@ function resolveWorkspaceIdFromBrowserContext(): string | null {
 
 function pickWorkspaceId(args: unknown[]): string | null {
   for (const arg of args) {
-    if (typeof arg === "string" && arg.length > 0) {
+    if (typeof arg === "string" && arg.length > 0 && isWorkspaceId(arg)) {
       return arg;
     }
     if (arg && typeof arg === "object" && "workspaceId" in arg) {
       const workspaceId = (arg as { workspaceId?: unknown }).workspaceId;
-      if (typeof workspaceId === "string" && workspaceId.length > 0) {
+      if (typeof workspaceId === "string" && isWorkspaceId(workspaceId)) {
         return workspaceId;
       }
     }
   }
 
-  return resolveWorkspaceIdFromBrowserContext();
+  const resolved = resolveWorkspaceIdFromBrowserContext();
+  if (resolved) {
+    return resolved;
+  }
+
+  throw new Error("Workspace context is missing. Select a workspace and retry.");
 }
 
 function pickBody(args: unknown[]): Record<string, unknown> {
   return (args.find((value) => value && typeof value === "object") as Record<string, unknown> | undefined) ?? {};
+}
+
+function pickInvoicePubkey(args: unknown[], workspaceId: string | null): string | null {
+  for (const arg of args) {
+    if (arg && typeof arg === "object" && "invoicePubkey" in arg) {
+      const invoicePubkey = (arg as { invoicePubkey?: unknown }).invoicePubkey;
+      if (typeof invoicePubkey === "string" && invoicePubkey.length > 0) {
+        return invoicePubkey;
+      }
+    }
+  }
+
+  const candidate = args.find(
+    (arg) => typeof arg === "string" && arg.length > 0 && arg !== workspaceId && !isWorkspaceId(arg),
+  );
+  return typeof candidate === "string" ? candidate : null;
 }
 
 async function listByKey<T>(workspaceId: string, segment: string, key: string): Promise<T[]> {
@@ -193,19 +223,76 @@ export class ArSubledgerService {
   }
 
   async closeInvoice(...args: unknown[]): Promise<any> {
-    return this.issueInvoice(...args);
+    const workspaceId = pickWorkspaceId(args);
+    const body = pickBody(args);
+    const invoicePubkey = pickInvoicePubkey(args, workspaceId);
+    if (!invoicePubkey) {
+      throw new Error("invoicePubkey is required to close invoice.");
+    }
+
+    const payload = (await apiFetch(workspacePath(workspaceId, `/invoices/${encodeURIComponent(invoicePubkey)}/close`), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })) as Record<string, unknown>;
+    return payload.closed ?? false;
   }
 
   async issueCreditNote(...args: unknown[]): Promise<any> {
-    return this.issueInvoice(...args);
+    const workspaceId = pickWorkspaceId(args);
+    const body = pickBody(args);
+    const invoicePubkey = pickInvoicePubkey(args, workspaceId);
+    if (!invoicePubkey) {
+      throw new Error("invoicePubkey is required to issue credit note.");
+    }
+
+    const payload = (await apiFetch(
+      workspacePath(workspaceId, `/invoices/${encodeURIComponent(invoicePubkey)}/credit-notes`),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    )) as Record<string, unknown>;
+
+    return payload.creditNote ?? null;
   }
 
   async recordReceipt(...args: unknown[]): Promise<any> {
-    return this.issueInvoice(...args);
+    const workspaceId = pickWorkspaceId(args);
+    const body = pickBody(args);
+    const invoicePubkey = pickInvoicePubkey(args, workspaceId);
+    if (!invoicePubkey) {
+      throw new Error("invoicePubkey is required to record receipt.");
+    }
+
+    const payload = (await apiFetch(
+      workspacePath(workspaceId, `/invoices/${encodeURIComponent(invoicePubkey)}/receipts`),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    )) as Record<string, unknown>;
+
+    return payload.receipt ?? null;
   }
 
   async writeOffInvoice(...args: unknown[]): Promise<any> {
-    return this.issueInvoice(...args);
+    const workspaceId = pickWorkspaceId(args);
+    const body = pickBody(args);
+    const invoicePubkey = pickInvoicePubkey(args, workspaceId);
+    if (!invoicePubkey) {
+      throw new Error("invoicePubkey is required to write off invoice.");
+    }
+
+    const payload = (await apiFetch(workspacePath(workspaceId, `/invoices/${encodeURIComponent(invoicePubkey)}/writeoff`), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })) as Record<string, unknown>;
+
+    return payload.writeoff ?? null;
   }
 
   async listActivity(...args: unknown[]): Promise<any[]> {
@@ -220,16 +307,40 @@ export class ArSubledgerService {
     return [...invoices, ...receipts, ...writeOffs, ...creditNotes];
   }
 
-  async listReceipts(..._args: unknown[]): Promise<any[]> {
-    return [];
+  async listReceipts(...args: unknown[]): Promise<any[]> {
+    const workspaceId = pickWorkspaceId(args);
+    const invoicePubkey = pickInvoicePubkey(args, workspaceId);
+    if (!invoicePubkey) return [];
+
+    const payload = (await apiFetch(
+      workspacePath(workspaceId, `/invoices/${encodeURIComponent(invoicePubkey)}/receipts`),
+    )) as Record<string, unknown>;
+    const value = payload.receipts;
+    return Array.isArray(value) ? (value as any[]) : [];
   }
 
-  async listWriteOffs(..._args: unknown[]): Promise<any[]> {
-    return [];
+  async listWriteOffs(...args: unknown[]): Promise<any[]> {
+    const workspaceId = pickWorkspaceId(args);
+    const invoicePubkey = pickInvoicePubkey(args, workspaceId);
+    if (!invoicePubkey) return [];
+
+    const payload = (await apiFetch(
+      workspacePath(workspaceId, `/invoices/${encodeURIComponent(invoicePubkey)}/writeoff`),
+    )) as Record<string, unknown>;
+    const writeoff = payload.writeoff;
+    return writeoff && typeof writeoff === "object" ? [writeoff] : [];
   }
 
-  async listCreditNotes(..._args: unknown[]): Promise<any[]> {
-    return [];
+  async listCreditNotes(...args: unknown[]): Promise<any[]> {
+    const workspaceId = pickWorkspaceId(args);
+    const invoicePubkey = pickInvoicePubkey(args, workspaceId);
+    if (!invoicePubkey) return [];
+
+    const payload = (await apiFetch(
+      workspacePath(workspaceId, `/invoices/${encodeURIComponent(invoicePubkey)}/credit-notes`),
+    )) as Record<string, unknown>;
+    const value = payload.creditNotes;
+    return Array.isArray(value) ? (value as any[]) : [];
   }
 }
 

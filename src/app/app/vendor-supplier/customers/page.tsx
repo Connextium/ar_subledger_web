@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { SearchBar } from "@/components/records/search-bar";
 import { PageTitle } from "@/components/ui/page-title";
@@ -30,14 +30,14 @@ import type {
 
 export default function CustomersPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const arService = useArSubledger();
   const { canWriteTransactions } = useRoleGate();
   const { selectedWorkspaceId, ledgerLinks } = useWorkspace();
-  const { customerId, refreshCustomerOptions, setCustomerId, setLedgerPda, workspaceId } = useWorkingContext();
+  const { customerId, refreshCustomerOptions, setCustomerId, setLedgerPda } = useWorkingContext();
 
-  const workspaceFromQuery = searchParams.get("workspace");
-  const activeWorkspaceId = workspaceId ?? selectedWorkspaceId ?? workspaceFromQuery;
+  // Topbar workspace selector is the source of truth for workspace-scoped API calls.
+  // Avoid stale working-context/query workspace IDs on protected mutations.
+  const activeWorkspaceId = selectedWorkspaceId ?? null;
 
   const [customers, setCustomers] = useState<WorkspaceCustomer[]>([]);
   const [codeRegistry, setCodeRegistry] = useState<WorkspaceCustomerCodeRegistryEntry[]>([]);

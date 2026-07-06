@@ -7,6 +7,8 @@ import { controlPlaneService } from "@/lib/api-client/v1/platform";
 import type { WorkspaceCustomer, WorkspaceLedgerLink } from "@/lib/types/domain";
 
 const WORKING_CONTEXT_STORAGE_KEY = "ar:working-context";
+const WORKSPACE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type WorkingContextValue = {
   workspaceId: string | null;
@@ -129,6 +131,15 @@ function normalize(value: string | null): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeWorkspaceId(value: string | null | undefined): string | null {
+  const normalized = normalize(value ?? null);
+  if (!normalized) {
+    return null;
+  }
+
+  return WORKSPACE_ID_PATTERN.test(normalized) ? normalized : null;
+}
+
 export function WorkingContextProvider({ children }: { children: React.ReactNode }) {
   const { selectedWorkspaceId, ledgerLinks } = useWorkspace();
   const router = useRouter();
@@ -177,7 +188,7 @@ export function WorkingContextProvider({ children }: { children: React.ReactNode
       dispatch({
         type: "hydrate_from_storage",
         payload: {
-          workspaceId: parsed.workspaceId,
+          workspaceId: normalizeWorkspaceId(typeof parsed.workspaceId === "string" ? parsed.workspaceId : null),
           ledgerPda: parsed.ledgerPda,
           customerId: parsed.customerId,
           invoicePubkey: parsed.invoicePubkey,
@@ -218,7 +229,10 @@ export function WorkingContextProvider({ children }: { children: React.ReactNode
   }, [workspaceId, ledgerPda, customerId, invoicePubkey]);
 
   useEffect(() => {
-    dispatch({ type: "sync_workspace_from_top", payload: { workspaceId: selectedWorkspaceId } });
+    dispatch({
+      type: "sync_workspace_from_top",
+      payload: { workspaceId: normalizeWorkspaceId(selectedWorkspaceId) },
+    });
   }, [selectedWorkspaceId]);
 
   useEffect(() => {

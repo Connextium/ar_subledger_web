@@ -191,7 +191,7 @@ function resolveWorkspaceIdFromBrowserContext(): string | null {
   }
 
   const fromQuery = new URL(window.location.href).searchParams.get("workspace")?.trim();
-  if (fromQuery) {
+  if (fromQuery && isWorkspaceId(fromQuery)) {
     return fromQuery;
   }
 
@@ -202,7 +202,9 @@ function resolveWorkspaceIdFromBrowserContext(): string | null {
 
   try {
     const parsed = JSON.parse(raw) as { workspaceId?: unknown };
-    return typeof parsed.workspaceId === "string" && parsed.workspaceId.length > 0 ? parsed.workspaceId : null;
+    return typeof parsed.workspaceId === "string" && isWorkspaceId(parsed.workspaceId)
+      ? parsed.workspaceId
+      : null;
   } catch {
     return null;
   }
@@ -215,7 +217,7 @@ function pickWorkspaceId(args: unknown[]): string | null {
     }
     if (arg && typeof arg === "object" && "workspaceId" in arg) {
       const workspaceId = (arg as { workspaceId?: unknown }).workspaceId;
-      if (typeof workspaceId === "string" && workspaceId.length > 0) {
+      if (typeof workspaceId === "string" && isWorkspaceId(workspaceId)) {
         return workspaceId;
       }
     }

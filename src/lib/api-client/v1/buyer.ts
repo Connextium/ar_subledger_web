@@ -198,11 +198,47 @@ export class ApSubledgerService {
   }
 
   async payVendorInvoice(...args: unknown[]): Promise<any> {
-    return this.receiveVendorInvoice(...args);
+    const workspaceId = pickWorkspaceId(args);
+    if (!workspaceId) return null;
+
+    const body = pickBody(args);
+    const invoicePubkey =
+      typeof body.invoicePubkey === "string" && body.invoicePubkey.length > 0
+        ? body.invoicePubkey
+        : null;
+
+    if (!invoicePubkey) {
+      return null;
+    }
+
+    const payload = (await apiFetch(
+      workspacePath(workspaceId, `/vendor-invoices/${encodeURIComponent(invoicePubkey)}/payments`),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    )) as Record<string, unknown>;
+
+    return payload.payment ?? null;
   }
 
-  async listVendorPayments(..._args: unknown[]): Promise<any[]> {
-    return [];
+  async listVendorPayments(...args: unknown[]): Promise<any[]> {
+    const workspaceId = pickWorkspaceId(args);
+    if (!workspaceId) return [];
+
+    const invoicePubkey =
+      args.find((arg) => typeof arg === "string" && arg !== workspaceId && !isWorkspaceId(arg)) as string | undefined;
+
+    if (!invoicePubkey) {
+      return [];
+    }
+
+    const payload = (await apiFetch(
+      workspacePath(workspaceId, `/vendor-invoices/${encodeURIComponent(invoicePubkey)}/payments`),
+    )) as Record<string, unknown>;
+    const value = payload.payments;
+    return Array.isArray(value) ? (value as any[]) : [];
   }
 }
 

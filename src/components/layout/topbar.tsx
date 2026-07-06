@@ -10,7 +10,7 @@ import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { clampText } from "@/lib/utils/format";
 
 export function Topbar() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, reloginWarning, dismissReloginWarning } = useAuth();
   const { workspaces, selectedWorkspaceId, selectWorkspace, role, createWorkspace } = useWorkspace();
   const { wallet } = useEmbeddedWallet();
   const [newWorkspace, setNewWorkspace] = useState("");
@@ -132,6 +132,19 @@ export function Topbar() {
       {workspaceError ? (
         <div className="border-t border-rose-200 bg-rose-50 px-4 py-2 text-[11px] text-rose-700">
           {workspaceError}
+        </div>
+      ) : null}
+
+      {reloginWarning ? (
+        <div className="flex items-center justify-between gap-2 border-t border-amber-200 bg-amber-50 px-4 py-2 text-[11px] text-amber-800">
+          <span>{reloginWarning}</span>
+          <button
+            type="button"
+            className="rounded border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-900 hover:bg-amber-200"
+            onClick={dismissReloginWarning}
+          >
+            Dismiss
+          </button>
         </div>
       ) : null}
     </header>

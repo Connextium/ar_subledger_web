@@ -8,8 +8,11 @@ import {
 type AuthSessionPayload = {
   user: AuthUser | null;
   accessToken?: string;
+  access_token?: string;
   refreshToken?: string;
+  refresh_token?: string;
   expiresAt?: number;
+  expires_at?: number;
 };
 
 function toSession(payload: AuthSessionPayload | null | undefined): AuthSession | null {
@@ -17,10 +20,30 @@ function toSession(payload: AuthSessionPayload | null | undefined): AuthSession 
     return null;
   }
 
+  const accessToken =
+    (typeof payload.accessToken === "string" ? payload.accessToken : null) ??
+    (typeof payload.access_token === "string" ? payload.access_token : null);
+
+  if (!accessToken || accessToken.length === 0) {
+    return null;
+  }
+
+  const refreshToken =
+    (typeof payload.refreshToken === "string" ? payload.refreshToken : null) ??
+    (typeof payload.refresh_token === "string" ? payload.refresh_token : null) ??
+    "";
+
+  const expiresAt =
+    typeof payload.expiresAt === "number"
+      ? payload.expiresAt
+      : typeof payload.expires_at === "number"
+        ? payload.expires_at
+        : undefined;
+
   return {
-    access_token: payload.accessToken ?? "",
-    refresh_token: payload.refreshToken ?? "",
-    expires_at: payload.expiresAt,
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_at: expiresAt,
     user: {
       id: payload.user.id,
       email: payload.user.email ?? undefined,
@@ -106,8 +129,7 @@ export const authApi = {
       writeStoredSession(session);
       return { session, user: session?.user ?? null };
     } catch {
-      writeStoredSession(null);
-      return { session: null as AuthSession | null, user: null as AuthUser | null };
+      return { session: stored, user: stored.user ?? null };
     }
   },
   async listApiKeys(workspaceId: string, accessToken?: string) {

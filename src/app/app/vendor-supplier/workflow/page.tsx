@@ -198,6 +198,10 @@ export default function WorkflowPage() {
       throw new Error("Selected ledger link not found in workspace");
     }
 
+    if (!activeWorkspaceId) {
+      throw new Error("Select a workspace before persisting posting lines.");
+    }
+
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -208,14 +212,16 @@ export default function WorkflowPage() {
     }
 
     await accountingEngineService.saveJournalEntryPostingLines(
-      selectedWorkspaceLedgerLink.id,
-      BigInt(journalEntryId),
-      postingLines.map((line) => ({
-        accountCode: line.accountCode,
-        amount: BigInt(line.amount),
-        isDebit: line.isDebit,
-      })),
-      session.access_token,
+      {
+        workspaceId: activeWorkspaceId,
+        ledgerId: selectedWorkspaceLedgerLink.id,
+        entryId: String(journalEntryId),
+        postingLines: postingLines.map((line) => ({
+          accountCode: line.accountCode,
+          amount: String(line.amount),
+          isDebit: line.isDebit,
+        })),
+      },
     );
   };
 
@@ -286,6 +292,7 @@ export default function WorkflowPage() {
     setErrors({});
     setSuccess(null);
     if (!canWriteTransactions) { setErrors({ form: "Your current role does not allow transaction writes." }); return; }
+    if (!activeWorkspaceId) { setErrors({ form: "Select a workspace before recording a receipt." }); return; }
     if (!service || !ledgerPda) { setErrors({ form: "Select a Supplier ledger in Supplier AR Context first." }); return; }
     if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the Supplier ledger first." }); return; }
     if (!selectedInvoice) { setErrors({ form: "Select an invoice first." }); return; }
@@ -305,7 +312,7 @@ export default function WorkflowPage() {
       if (!latestLedger) throw new Error("Ledger account not found");
       const journalEntryId = latestLedger.nextJournalEntryId;
       const amountMinor = parseAmountToMinor(receiptAmount);
-      await service.recordReceipt({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, receiptSeq: Number(receiptSeq), receiptNo, amountMinor, receiptDateUnix: toUnix(receiptDate), paymentReference, onSubmitted: (signature) => showSubmittedSignature("Receipt", signature) });
+      await service.recordReceipt({ workspaceId: activeWorkspaceId, ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, receiptSeq: Number(receiptSeq), receiptNo, amountMinor, receiptDateUnix: toUnix(receiptDate), paymentReference, onSubmitted: (signature) => showSubmittedSignature("Receipt", signature) });
       await persistPostingLines(journalEntryId, [{ accountCode: latestLedger.cashAccountCode, amount: amountMinor, isDebit: true }, { accountCode: latestLedger.arControlAccountCode, amount: amountMinor, isDebit: false }]);
       await loadRecords();
       setSuccess("Receipt recorded");
@@ -321,6 +328,7 @@ export default function WorkflowPage() {
     setErrors({});
     setSuccess(null);
     if (!canWriteTransactions) { setErrors({ form: "Your current role does not allow transaction writes." }); return; }
+    if (!activeWorkspaceId) { setErrors({ form: "Select a workspace before issuing a credit note." }); return; }
     if (!service || !ledgerPda) { setErrors({ form: "Select a Supplier ledger in Supplier AR Context first." }); return; }
     if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the Supplier ledger first." }); return; }
     if (!selectedInvoice) { setErrors({ form: "Select an invoice first." }); return; }
@@ -335,7 +343,7 @@ export default function WorkflowPage() {
       if (!latestLedger) throw new Error("Ledger account not found");
       const journalEntryId = latestLedger.nextJournalEntryId;
       const amountMinor = parseAmountToMinor(creditAmount);
-      await service.issueCreditNote({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, creditSeq: Number(creditSeq), creditNo, amountMinor, creditDateUnix: toUnix(creditDate), reason: creditReason, onSubmitted: (signature) => showSubmittedSignature("Credit note", signature) });
+      await service.issueCreditNote({ workspaceId: activeWorkspaceId, ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, creditSeq: Number(creditSeq), creditNo, amountMinor, creditDateUnix: toUnix(creditDate), reason: creditReason, onSubmitted: (signature) => showSubmittedSignature("Credit note", signature) });
       await persistPostingLines(journalEntryId, [{ accountCode: latestLedger.revenueAccountCode, amount: amountMinor, isDebit: true }, { accountCode: latestLedger.arControlAccountCode, amount: amountMinor, isDebit: false }]);
       await loadRecords();
       setSuccess("Credit note issued");
@@ -351,6 +359,7 @@ export default function WorkflowPage() {
     setErrors({});
     setSuccess(null);
     if (!canWriteTransactions) { setErrors({ form: "Your current role does not allow transaction writes." }); return; }
+    if (!activeWorkspaceId) { setErrors({ form: "Select a workspace before writing off an invoice." }); return; }
     if (!service || !ledgerPda) { setErrors({ form: "Select a Supplier ledger in Supplier AR Context first." }); return; }
     if (!activeOnchainCustomerPubkey) { setErrors({ form: "Select a customer linked to the Supplier ledger first." }); return; }
     if (!selectedInvoice) { setErrors({ form: "Select an invoice first." }); return; }
@@ -365,7 +374,7 @@ export default function WorkflowPage() {
       if (!latestLedger) throw new Error("Ledger account not found");
       const journalEntryId = latestLedger.nextJournalEntryId;
       const amountMinor = parseAmountToMinor(writeoffAmount);
-      await service.writeOffInvoice({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, amountMinor, writeoffDateUnix: toUnix(writeoffDate), reason: writeoffReason, onSubmitted: (signature) => showSubmittedSignature("Write-off", signature) });
+      await service.writeOffInvoice({ workspaceId: activeWorkspaceId, ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoicePubkey: selectedInvoice.pubkey, amountMinor, writeoffDateUnix: toUnix(writeoffDate), reason: writeoffReason, onSubmitted: (signature) => showSubmittedSignature("Write-off", signature) });
       await persistPostingLines(journalEntryId, [{ accountCode: latestLedger.writeoffExpenseAccountCode, amount: amountMinor, isDebit: true }, { accountCode: latestLedger.arControlAccountCode, amount: amountMinor, isDebit: false }]);
       await loadRecords();
       setSuccess("Invoice written off");
@@ -403,6 +412,11 @@ export default function WorkflowPage() {
               return;
             }
 
+            if (!activeWorkspaceId) {
+              setErrors({ form: "Select a workspace before issuing an invoice." });
+              return;
+            }
+
             if (!service || !ledgerPda) {
               setErrors({ form: "Select a Supplier ledger in Supplier AR Context first." });
               return;
@@ -436,7 +450,7 @@ export default function WorkflowPage() {
 
               const journalEntryId = latestLedger.nextJournalEntryId;
               const amountMinor = parseAmountToMinor(invoiceAmount);
-              const nextInvoice = await service.issueInvoice({ ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoiceNo, amountMinor, issueDateUnix: toUnix(issueDate), dueDateUnix: toUnix(dueDate), currency, description, onSubmitted: (signature) => showSubmittedSignature("Invoice", signature) });
+              const nextInvoice = await service.issueInvoice({ workspaceId: activeWorkspaceId, ledgerPubkey: ledgerPda, customerPubkey: activeOnchainCustomerPubkey, invoiceNo, amountMinor, issueDateUnix: toUnix(issueDate), dueDateUnix: toUnix(dueDate), currency, description, onSubmitted: (signature) => showSubmittedSignature("Invoice", signature) });
 
               await persistPostingLines(journalEntryId, [
                 { accountCode: latestLedger.arControlAccountCode, amount: amountMinor, isDebit: true },

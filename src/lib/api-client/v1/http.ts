@@ -12,8 +12,11 @@ import {
 
 type StoredAuthSession = {
   access_token?: string;
+  accessToken?: string;
   refresh_token?: string;
+  refreshToken?: string;
   expires_at?: number;
+  expiresAt?: number;
   user?: unknown;
 };
 
@@ -49,9 +52,31 @@ function readStoredAccessToken(): string | null {
   }
 
   const session = readStoredSession();
-  return typeof session?.access_token === "string" && session.access_token.length > 0
-    ? session.access_token
-    : null;
+  return readAccessTokenFromSession(session);
+}
+
+function readAccessTokenFromSession(session: StoredAuthSession | null | undefined): string | null {
+  if (!session) {
+    return null;
+  }
+
+  const token =
+    (typeof session.access_token === "string" ? session.access_token : null) ??
+    (typeof session.accessToken === "string" ? session.accessToken : null);
+
+  return token && token.length > 0 ? token : null;
+}
+
+function readRefreshTokenFromSession(session: StoredAuthSession | null | undefined): string | null {
+  if (!session) {
+    return null;
+  }
+
+  const token =
+    (typeof session.refresh_token === "string" ? session.refresh_token : null) ??
+    (typeof session.refreshToken === "string" ? session.refreshToken : null);
+
+  return token && token.length > 0 ? token : null;
 }
 
 function readStoredSession(): StoredAuthSession | null {
@@ -77,7 +102,7 @@ function toStoredSession(payload: AuthSessionPayload | null | undefined): Stored
 
 async function tryRefreshAccessToken(): Promise<string | null> {
   const stored = readStoredSession();
-  const refreshToken = stored?.refresh_token;
+  const refreshToken = readRefreshTokenFromSession(stored);
   if (!refreshToken) {
     return null;
   }
@@ -101,15 +126,12 @@ async function tryRefreshAccessToken(): Promise<string | null> {
           : null;
 
         if (!payload || !response.ok || "error" in payload) {
-          writeStoredSession(null);
           return null;
         }
 
         const nextSession = toStoredSession(payload.data.session);
         writeStoredSession(nextSession);
-        return typeof nextSession?.access_token === "string" && nextSession.access_token.length > 0
-          ? nextSession.access_token
-          : null;
+        return readAccessTokenFromSession(nextSession);
       } catch {
         return null;
       } finally {
@@ -127,6 +149,32 @@ function canRetryWithSameBody(init: RequestInit): boolean {
   }
 
   return !(init.body instanceof ReadableStream);
+}
+
+function formatErrorDetails(details: unknown): string {
+  if (details == null) {
+    return "";
+  }
+
+  if (typeof details === "string") {
+    return details.length > 0 ? details : "";
+  }
+
+  try {
+    return JSON.stringify(details);
+  } catch {
+    return "";
+  }
+}
+
+function formatApiErrorMessage(message: string, details: unknown, status?: number): string {
+  const normalized = toReloginWarningMessage(message, status);
+  const detailText = formatErrorDetails(details);
+  if (!detailText) {
+    return normalized;
+  }
+
+  return `${normalized} Details: ${detailText}`;
 }
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -170,13 +218,11 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
         const retryErrorMessage = "error" in retryPayload
           ? retryPayload.error.message
           : `API request failed: ${retryResponse.status}`;
+        const retryErrorDetails = "error" in retryPayload ? retryPayload.error.details : null;
         if (isReloginRequiredError(retryErrorMessage, retryResponse.status)) {
-          writeStoredSession(null);
           dispatchReloginRequired(retryErrorMessage);
         }
-        throw new Error(
-          toReloginWarningMessage(retryErrorMessage, retryResponse.status),
-        );
+        throw new Error(formatApiErrorMessage(retryErrorMessage, retryErrorDetails, retryResponse.status));
       }
 
       return retryPayload.data;
@@ -185,7 +231,6 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
   if (!payload) {
     if (isReloginRequiredError(null, response.status)) {
-      writeStoredSession(null);
       dispatchReloginRequired();
     }
     throw new Error(`API response body is empty: ${response.status}`);
@@ -193,11 +238,11 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
   if (!response.ok || "error" in payload) {
     const errorMessage = "error" in payload ? payload.error.message : `API request failed: ${response.status}`;
+    const errorDetails = "error" in payload ? payload.error.details : null;
     if (isReloginRequiredError(errorMessage, response.status)) {
-      writeStoredSession(null);
       dispatchReloginRequired(errorMessage);
     }
-    throw new Error(toReloginWarningMessage(errorMessage, response.status));
+    throw new Error(formatApiErrorMessage(errorMessage, errorDetails, response.status));
   }
   return payload.data;
 }
