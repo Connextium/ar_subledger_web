@@ -4,7 +4,13 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 
-export function AuthPageShell({ children }: { children: React.ReactNode }) {
+export function AuthPageShell({
+  children,
+  renderWhileCheckingSession = false,
+}: {
+  children: React.ReactNode;
+  renderWhileCheckingSession?: boolean;
+}) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
@@ -16,7 +22,7 @@ export function AuthPageShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      {loading ? (
+      {loading && !renderWhileCheckingSession ? (
         <div className="mx-auto mt-24 max-w-sm rounded-xl border border-slate-200 bg-white p-5 text-center text-xs text-slate-500">
           Checking session...
         </div>

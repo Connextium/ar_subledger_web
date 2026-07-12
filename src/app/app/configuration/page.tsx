@@ -8,6 +8,7 @@ import { useEmbeddedWallet } from "@/context/embedded-wallet-context";
 import { useRoleGate } from "@/hooks/use-role-gate";
 import { supabase } from "@/lib/api-client/v1/session-client";
 import { resolveApiBasePath } from "@/lib/api-client/v1/config";
+import { authApi } from "@/lib/api-client/v1/auth";
 import { dispatchReloginRequired, RELOGIN_WARNING_MESSAGE } from "@/lib/auth/relogin-warning";
 import type { WalletUsage, WorkspaceWallet } from "@/lib/types/wallet";
 import { clampText } from "@/lib/utils/format";
@@ -24,8 +25,84 @@ const usageOptions: WalletUsage[] = [
   "emergency_fallback",
 ];
 
+type ApiKeyRecord = {
+  id: string;
+  clientId: string;
+  clientName: string | null;
+  workspaceId: string;
+  keyPrefix: string;
+  status: string;
+  createdAt: string;
+  revokedAt: string | null;
+};
+
+type CreatedApiKeyState = {
+  apiKey: string;
+  keyPrefix: string;
+  clientName: string | null;
+} | null;
+
 function formatSol(lamports: number): string {
   return (lamports / 1_000_000_000).toFixed(6);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function readString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function readNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function normalizeApiKeyRecord(record: unknown): ApiKeyRecord | null {
+  if (!isRecord(record)) {
+    return null;
+  }
+
+  const id = readString(record.id);
+  const clientId = readString(record.clientId);
+  const workspaceId = readString(record.workspaceId);
+  const keyPrefix = readString(record.keyPrefix);
+
+  if (!id || !clientId || !workspaceId || !keyPrefix) {
+    return null;
+  }
+
+  return {
+    id,
+    clientId,
+    clientName: readNullableString(record.clientName),
+    workspaceId,
+    keyPrefix,
+    status: readString(record.status) || "unknown",
+    createdAt: readString(record.createdAt),
+    revokedAt: readNullableString(record.revokedAt),
+  };
+}
+
+function parseApiKeyScopes(value: string): string[] {
+  const scopes = value
+    .split(/[\s,]+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+
+  return scopes.length > 0 ? scopes : ["workspace:*"];
+}
+
+function normalizeCreatedApiKey(payload: { apiKey?: string; record?: unknown }): CreatedApiKeyState {
+  if (!payload.apiKey || !isRecord(payload.record)) {
+    return null;
+  }
+
+  return {
+    apiKey: payload.apiKey,
+    keyPrefix: readString(payload.record.keyPrefix),
+    clientName: readNullableString(payload.record.clientName),
+  };
 }
 
 async function getAuthToken(): Promise<string | null> {
@@ -61,6 +138,13 @@ export default function ConfigurationPage() {
   const [importPrivateKey, setImportPrivateKey] = useState("");
   const [importSetAsMain, setImportSetAsMain] = useState(true);
   const [importingWallet, setImportingWallet] = useState(false);
+  const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+  const [apiKeyName, setApiKeyName] = useState("Default API Client");
+  const [apiKeyScopes, setApiKeyScopes] = useState("workspace:*");
+  const [creatingApiKey, setCreatingApiKey] = useState(false);
+  const [revokingApiKeyId, setRevokingApiKeyId] = useState<string | null>(null);
+  const [createdApiKey, setCreatedApiKey] = useState<CreatedApiKeyState>(null);
 
   const activeWorkspaceId = selectedWorkspaceId ?? workspaces[0]?.id ?? null;
   const hasWorkspace = Boolean(activeWorkspaceId);
@@ -116,9 +200,41 @@ export default function ConfigurationPage() {
     }
   }, [activeWorkspaceId]);
 
+  const loadApiKeys = useCallback(async () => {
+    if (!activeWorkspaceId) {
+      setApiKeys([]);
+      setCreatedApiKey(null);
+      return;
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      setError(RELOGIN_WARNING_MESSAGE);
+      dispatchReloginRequired();
+      return;
+    }
+
+    setApiKeysLoading(true);
+    setError(null);
+    try {
+      const payload = await authApi.listApiKeys(activeWorkspaceId, token);
+      setApiKeys(payload.apiKeys.map(normalizeApiKeyRecord).filter((record): record is ApiKeyRecord => record !== null));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Failed to load API keys.");
+    } finally {
+      setApiKeysLoading(false);
+    }
+  }, [activeWorkspaceId]);
+
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadWallets();
   }, [loadWallets]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadApiKeys();
+  }, [loadApiKeys]);
 
   const requestBalanceRefresh = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -187,6 +303,7 @@ export default function ConfigurationPage() {
 
   useEffect(() => {
     if (!activeWorkspaceId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSetAsMain(false);
       return;
     }
@@ -328,6 +445,91 @@ export default function ConfigurationPage() {
     await requestBalanceRefresh({ silent: false });
   };
 
+  const createApiKey = async () => {
+    if (!activeWorkspaceId || creatingApiKey) return;
+
+    const token = await getAuthToken();
+    if (!token) {
+      setError(RELOGIN_WARNING_MESSAGE);
+      dispatchReloginRequired();
+      return;
+    }
+
+    setCreatingApiKey(true);
+    setCreatedApiKey(null);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const payload = await authApi.createApiKey(
+        {
+          workspaceId: activeWorkspaceId,
+          name: apiKeyName.trim() || "Default API Client",
+          scopes: parseApiKeyScopes(apiKeyScopes),
+        },
+        token,
+      );
+
+      const nextCreatedApiKey = normalizeCreatedApiKey(payload);
+      if (!nextCreatedApiKey) {
+        throw new Error("API key was created, but the response did not include a raw key.");
+      }
+
+      setCreatedApiKey(nextCreatedApiKey);
+      setMessage("API key created. Copy now; the raw key is shown once and will not be stored by the web app.");
+      await loadApiKeys();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Failed to create API key.");
+    } finally {
+      setCreatingApiKey(false);
+    }
+  };
+
+  const copyCreatedApiKey = async () => {
+    if (!createdApiKey) return;
+
+    try {
+      await navigator.clipboard.writeText(createdApiKey.apiKey);
+      setMessage("API key copied to clipboard.");
+      setError(null);
+    } catch {
+      setError("Clipboard copy failed. Manually copy the visible API key before dismissing it.");
+    }
+  };
+
+  const dismissCreatedApiKey = () => {
+    setCreatedApiKey(null);
+  };
+
+  const revokeApiKey = async (keyId: string) => {
+    if (!activeWorkspaceId || revokingApiKeyId) return;
+
+    if (!window.confirm("Revoke this API key? Existing integrations using it will stop authenticating.")) {
+      return;
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      setError(RELOGIN_WARNING_MESSAGE);
+      dispatchReloginRequired();
+      return;
+    }
+
+    setRevokingApiKeyId(keyId);
+    setError(null);
+    setMessage(null);
+
+    try {
+      await authApi.revokeApiKey(keyId, token);
+      setMessage("API key revoked.");
+      await loadApiKeys();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Failed to revoke API key.");
+    } finally {
+      setRevokingApiKeyId(null);
+    }
+  };
+
   const exportWallet = async (walletId: string) => {
     if (!activeWorkspaceId) return;
     const token = await getAuthToken();
@@ -402,6 +604,108 @@ export default function ConfigurationPage() {
         ) : (
           <p className="mt-2 text-[11px] text-slate-500">No main wallet is set for this workspace.</p>
         )}
+      </section>
+
+      <section id="api-keys" className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-xs font-semibold text-slate-900">API Keys</h2>
+            <p className="mt-1 text-[11px] text-slate-600">
+              Workspace-scoped service keys for integrations. Raw keys are shown once after creation.
+            </p>
+          </div>
+          <Button variant="ghost" onClick={() => void loadApiKeys()} disabled={!hasWorkspace || apiKeysLoading}>
+            {apiKeysLoading ? "Loading..." : "Reload"}
+          </Button>
+        </div>
+
+        {!hasWorkspace ? (
+          <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-700">
+            Workspace is required before API key management.
+          </p>
+        ) : null}
+
+        <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+          <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-700">
+            <span>Client Name</span>
+            <input
+              className="rounded-md border border-slate-300 bg-slate-50 px-2.5 py-2 text-xs text-slate-900 outline-none placeholder:text-slate-500 focus:border-cyan-300/60"
+              value={apiKeyName}
+              onChange={(event) => setApiKeyName(event.target.value)}
+              placeholder="ERP integration"
+              autoComplete="off"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-[11px] font-semibold text-slate-700">
+            <span>Scopes</span>
+            <input
+              className="rounded-md border border-slate-300 bg-slate-50 px-2.5 py-2 font-mono text-xs text-slate-900 outline-none placeholder:text-slate-500 focus:border-cyan-300/60"
+              value={apiKeyScopes}
+              onChange={(event) => setApiKeyScopes(event.target.value)}
+              placeholder="workspace:*"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          <Button
+            disabled={!hasWorkspace || !canWriteTransactions || creatingApiKey}
+            onClick={createApiKey}
+          >
+            {creatingApiKey ? "Creating..." : "Create API Key"}
+          </Button>
+        </div>
+
+        {createdApiKey ? (
+          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
+            <h3 className="text-xs font-semibold text-amber-900">Copy now. This raw key will not be shown again.</h3>
+            <p className="mt-1 text-[11px] text-amber-800">
+              Client: {createdApiKey.clientName ?? "Unnamed client"} | Prefix: {createdApiKey.keyPrefix || "-"}
+            </p>
+            <p className="mt-2 break-all rounded border border-amber-300 bg-white p-2 font-mono text-[10px] text-slate-800">
+              {createdApiKey.apiKey}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => void copyCreatedApiKey()}>
+                Copy Key
+              </Button>
+              <Button variant="ghost" onClick={dismissCreatedApiKey}>
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-3 space-y-2">
+          {apiKeys.length === 0 ? (
+            <p className="text-[11px] text-slate-500">
+              {apiKeysLoading ? "Loading API keys..." : "No API keys have been created for this workspace."}
+            </p>
+          ) : (
+            apiKeys.map((apiKey) => (
+              <div key={apiKey.id} className="rounded-md border border-slate-200 bg-slate-50 p-2 text-[11px]">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-mono text-[10px] font-semibold text-slate-900">{apiKey.keyPrefix}</p>
+                    <p className="mt-1 text-slate-600">
+                      {apiKey.clientName ?? "Unnamed client"} | Status: {apiKey.status}
+                    </p>
+                    <p className="mt-1 text-slate-600">
+                      Created: {apiKey.createdAt ? new Date(apiKey.createdAt).toLocaleString() : "-"}
+                      {apiKey.revokedAt ? ` | Revoked: ${new Date(apiKey.revokedAt).toLocaleString()}` : ""}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    disabled={!canWriteTransactions || apiKey.status !== "active" || revokingApiKeyId === apiKey.id}
+                    onClick={() => void revokeApiKey(apiKey.id)}
+                  >
+                    {revokingApiKeyId === apiKey.id ? "Revoking..." : "Revoke"}
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
